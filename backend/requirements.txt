@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+sqlalchemy
+alembic
+psycopg2-binary
+celery
+redis
+dnspython
+pydantic
+email-validator
+python-multipart
+httpx
+jinja2
