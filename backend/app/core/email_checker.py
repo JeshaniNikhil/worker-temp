@@ -50,8 +50,8 @@ def get_mx_records(domain: str) -> list:
 def verify_smtp(mx_record: str, email: str, sender_email: str = "verify@example.com") -> Tuple[str, str]:
     server = None
     try:
-        # Connect to SMTP server
-        server = smtplib.SMTP(timeout=3)
+        # Connect to SMTP server with a longer timeout (10s) to prevent false timeouts
+        server = smtplib.SMTP(timeout=10)
         server.connect(mx_record)
         
         # Try EHLO/HELO

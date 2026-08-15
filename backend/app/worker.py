@@ -51,8 +51,8 @@ def process_csv_validation(self, job_id: int, file_content: str, email_column: s
         unknown_count = 0
         processed = 0
         
-        # Use concurrent ThreadPoolExecutor for highly parallel DNS & SMTP IO checks
-        max_workers = min(30, len(rows_to_process) or 1)
+        # Use concurrent ThreadPoolExecutor but limit to 10 to avoid IP blocks from rate-limiting
+        max_workers = min(10, len(rows_to_process) or 1)
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [
