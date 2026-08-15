@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
+    allowedHosts: ['wolf-crm.wolfgroupindia.com'],
     proxy: {
       '/api': 'http://localhost:8002'
     }
