@@ -19,6 +19,25 @@ class UploadCSVRequest(BaseModel):
     content: str
     email_column: str
 
+class SingleValidationRequest(BaseModel):
+    email: str
+
+@router.post("/single")
+def validate_single_email(req: SingleValidationRequest):
+    from app.core.email_checker import check_email
+    import time
+    
+    start_time = time.time()
+    status, reason = check_email(req.email)
+    end_time = time.time()
+    
+    return {
+        "email": req.email,
+        "status": status,
+        "reason": reason,
+        "execution_time_ms": round((end_time - start_time) * 1000, 2)
+    }
+
 @router.post("/upload", response_model=ValidationJobResponse)
 async def upload_csv(
     req: UploadCSVRequest,

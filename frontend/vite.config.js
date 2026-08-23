@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     allowedHosts: ['wolf-crm.wolfgroupindia.com'],
     proxy: {
-      '/api': 'http://localhost:8002'
+      '/api': 'http://api2:8000'
     }
   }
 })

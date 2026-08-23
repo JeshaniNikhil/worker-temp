@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, NavLink } from 'react-router-do
 import { LayoutDashboard, CheckCircle, Mail, Settings, Server } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import ValidationUpload from './pages/ValidationUpload';
+import SingleValidation from './pages/SingleValidation';
 import ValidationResults from './pages/ValidationResults';
 import TemplateList from './pages/TemplateList';
 import TemplateEditor from './pages/TemplateEditor';
@@ -23,8 +24,12 @@ function App() {
             <div className="nav-item" style={{ pointerEvents: 'none', opacity: 0.5, marginTop: '1rem', fontSize: '0.75rem', textTransform: 'uppercase' }}>
               Email Validator
             </div>
-            <NavLink to="/validate" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+            <NavLink to="/verify-single" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
               <CheckCircle className="nav-icon" />
+              <span>Verify Single Email</span>
+            </NavLink>
+            <NavLink to="/validate" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+              <Server className="nav-icon" />
               <span>Upload CSV</span>
             </NavLink>
             <NavLink to="/results" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
@@ -53,6 +58,7 @@ function App() {
           <div className="page-content">
             <Routes>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/verify-single" element={<SingleValidation />} />
               <Route path="/validate" element={<ValidationUpload />} />
               <Route path="/results" element={<ValidationResults />} />
               <Route path="/results/:jobId" element={<ValidationResults />} />
