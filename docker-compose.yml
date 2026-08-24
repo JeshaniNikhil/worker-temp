@@ -58,6 +58,10 @@ services:
       - /app/node_modules
     ports:
       - "8081:5173"
+    environment:
+      - VITE_API_TARGET=http://api2:8000
+    depends_on:
+      - api2
 
 volumes:
   postgres_data:

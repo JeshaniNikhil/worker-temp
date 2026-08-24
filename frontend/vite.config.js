@@ -7,7 +7,11 @@ export default defineConfig({
   server: {
     allowedHosts: ['wolf-crm.wolfgroupindia.com', '8081-01kzdyn8ygnsq2ad0xxrmzrnm9.cloudspaces.litng.ai'],
     proxy: {
-      '/api': 'http://api2:8000'
+      '/api': {
+        target: process.env.VITE_API_TARGET || 'http://api2:8000',
+        changeOrigin: true
+      }
     }
   }
 })
+

@@ -38,6 +38,19 @@ def validate_single_email(req: SingleValidationRequest):
         "execution_time_ms": round((end_time - start_time) * 1000, 2)
     }
 
+@router.post("/deep")
+def validate_email_deep(req: SingleValidationRequest):
+    """Run all 12 checks on an email. No Port 25 required."""
+    from app.core.email_checker import check_email_detailed
+    import time
+
+    start_time = time.time()
+    result = check_email_detailed(req.email)
+    end_time = time.time()
+
+    result["execution_time_ms"] = round((end_time - start_time) * 1000, 2)
+    return result
+
 @router.post("/upload", response_model=ValidationJobResponse)
 async def upload_csv(
     req: UploadCSVRequest,
