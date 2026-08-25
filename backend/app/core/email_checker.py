@@ -614,36 +614,66 @@ def _build_response(raw_email: str, normalized: str, checks: List[Dict[str, Any]
     syntax_status = check_map.get("Syntax", {}).get("status", "PASS")
     mx_status = check_map.get("MX Record", {}).get("status", "PASS")
 
-    # Determine overall status
+    # Determine structured boolean fields
+    domain_check = check_map.get("Domain Existence", {})
+    domain_valid = domain_check.get("status") == "PASS"
+
+    mx_valid = mx_status == "PASS"
+    
+    catch_all = "catch-all" in smtp_detail.lower() or "catch_all" in smtp_detail.lower()
+    
+    smtp_reachable = False
+    if smtp_status != "SKIP" and "Cannot reach mail server" not in smtp_detail and "SMTP Connection Error" not in smtp_detail and "TCP connection failed" not in smtp_detail and "Could not bind" not in smtp_detail:
+        smtp_reachable = True
+        
+    mailbox_verified = False
+    if smtp_status == "PASS" and not catch_all:
+        mailbox_verified = True
+
+    # Determine status
     if syntax_status == "FAIL" or mx_status == "FAIL":
-        overall = "NOT DELIVERABLE"
+        status = "INVALID"
+        reason = "Failed preliminary checks (syntax, MX, or domain)."
     elif smtp_status == "FAIL":
-        overall = "NOT DELIVERABLE"
+        status = "INVALID"
+        reason = "SMTP server explicitly rejected this address. Mailbox does not exist."
     elif smtp_status == "PASS":
-        # Check if it was a catch-all (detail contains Catch-All)
-        if "catch-all" in smtp_detail.lower() or "catch_all" in smtp_detail.lower():
-            overall = "RISKY"
+        if catch_all:
+            status = "RISKY"
+            reason = "Catch-all domain: server accepts arbitrary addresses, so the specific mailbox cannot be verified."
         else:
-            overall = "DELIVERABLE"
+            status = "VALID"
+            reason = "Mailbox exists and accepted verification."
     elif smtp_status == "WARNING":
-        # Timeout, temporary failure, catch-all
-        if "catch-all" in smtp_detail.lower() or "catch_all" in smtp_detail.lower():
-            overall = "RISKY"
+        if catch_all:
+            status = "RISKY"
+            reason = "Catch-all domain: server accepts arbitrary addresses, so the specific mailbox cannot be verified."
         else:
-            overall = "UNKNOWN"
+            status = "UNKNOWN"
+            reason = "Temporary SMTP failure, timeout, or network issue prevented verification."
     else:
         # SKIP (no SMTP check done)
         if score >= 71:
-            overall = "NOT DELIVERABLE"
+            status = "INVALID"
+            reason = "High risk score indicates undeliverable email."
         elif score >= 35:
-            overall = "RISKY"
+            status = "RISKY"
+            reason = "Moderate risk score without definitive SMTP verification."
         else:
-            overall = "DELIVERABLE"
+            status = "VALID"
+            reason = "Low risk score, assuming valid without SMTP."
 
     return {
         "email": raw_email,
         "normalized_email": normalized,
-        "overall_status": overall,
+        "status": status,
+        "overall_status": status,  # Kept for backward compatibility
+        "domain_valid": domain_valid,
+        "mx_valid": mx_valid,
+        "smtp_reachable": smtp_reachable,
+        "mailbox_verified": mailbox_verified,
+        "catch_all": catch_all,
+        "reason": reason,
         "risk_score": score,
         "risk_label": risk.get("label", ""),
         "checks": checks,
@@ -736,11 +766,11 @@ def _legacy_check_single(email: str) -> Tuple[str, str]:
     code = res.get("SMTP response code", "")
 
     if cls in ("VALID", "ACCEPTED"):
-        return "DELIVERABLE", f"SMTP RCPT TO accepted (Code {code}). Mailbox confirmed."
+        return "VALID", f"SMTP RCPT TO accepted (Code {code}). Mailbox confirmed."
     elif cls == "CATCH_ALL":
         return "RISKY", "Catch-All domain: server accepts all addresses. Specific mailbox unverifiable."
     elif cls in ("INVALID", "INVALID_SYNTAX", "NO_MX", "DNS_ERROR"):
-        return "NOT DELIVERABLE", f"SMTP rejected (Code {code}): {reason}"
+        return "INVALID", f"SMTP rejected (Code {code}): {reason}"
     elif cls == "TEMPORARY_FAILURE":
         return "UNKNOWN", f"Temporary SMTP failure (greylisting/rate-limit): {reason}"
     elif cls in ("TIMEOUT", "CONNECTION_ERROR", "TCP_CONNECTION_FAILED", "SMTP_BANNER_TIMEOUT", "SMTP_TIMEOUT_AFTER_CONNECTION", "SOURCE_IP_BIND_ERROR"):

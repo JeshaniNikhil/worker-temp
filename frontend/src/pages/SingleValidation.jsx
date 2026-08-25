@@ -20,13 +20,14 @@ const STATUS_CONFIG = {
 
 // ─── Overall verdict config ───────────────────────────────────────────────────
 const OVERALL_CONFIG = {
-  'DELIVERABLE':     { color: '#10b981', glow: 'rgba(16,185,129,0.3)',  label: '✅ DELIVERABLE',     subLabel: 'Safe to send — mailbox confirmed', icon: ShieldCheck },
-  'RISKY':           { color: '#f59e0b', glow: 'rgba(245,158,11,0.3)',  label: '⚠️ RISKY',            subLabel: 'Catch-All or unverifiable — send with caution', icon: ShieldAlert },
-  'NOT DELIVERABLE': { color: '#ef4444', glow: 'rgba(239,68,68,0.3)',   label: '❌ NOT DELIVERABLE', subLabel: 'Do not send — mailbox rejected or invalid', icon: ShieldX },
-  'UNKNOWN':         { color: '#94a3b8', glow: 'rgba(148,163,184,0.3)', label: '❓ UNKNOWN',          subLabel: 'Cannot determine — port blocked or timeout', icon: Shield },
-  // Fallback for old statuses
-  'VALID':   { color: '#10b981', glow: 'rgba(16,185,129,0.3)',  label: '✅ VALID',   subLabel: '', icon: ShieldCheck },
-  'INVALID': { color: '#ef4444', glow: 'rgba(239,68,68,0.3)',   label: '❌ INVALID', subLabel: '', icon: ShieldX },
+  'VALID':   { color: '#10b981', glow: 'rgba(16,185,129,0.3)',  label: '🟢 VALID',   subLabel: 'Safe to send — mailbox confirmed', icon: ShieldCheck },
+  'INVALID': { color: '#ef4444', glow: 'rgba(239,68,68,0.3)',   label: '🔴 INVALID', subLabel: 'Do not send — mailbox rejected or invalid', icon: ShieldX },
+  'RISKY':   { color: '#f59e0b', glow: 'rgba(245,158,11,0.3)',  label: '🟠 RISKY',   subLabel: 'Catch-All or unverifiable — send with caution', icon: ShieldAlert },
+  'UNKNOWN': { color: '#94a3b8', glow: 'rgba(148,163,184,0.3)', label: '⚪ UNKNOWN', subLabel: 'Cannot determine — port blocked or timeout', icon: Shield },
+  
+  // Fallbacks for older backend responses
+  'DELIVERABLE':     { color: '#10b981', glow: 'rgba(16,185,129,0.3)',  label: '🟢 VALID',   subLabel: 'Safe to send — mailbox confirmed', icon: ShieldCheck },
+  'NOT DELIVERABLE': { color: '#ef4444', glow: 'rgba(239,68,68,0.3)',   label: '🔴 INVALID', subLabel: 'Do not send — mailbox rejected or invalid', icon: ShieldX },
 };
 
 // ─── Check icons map ──────────────────────────────────────────────────────────
@@ -170,7 +171,11 @@ const SingleValidation = () => {
     }
   };
 
-  const overall = result ? (OVERALL_CONFIG[result.overall_status] || OVERALL_CONFIG['UNKNOWN']) : null;
+  const overall = result ? (OVERALL_CONFIG[result.status] || OVERALL_CONFIG[result.overall_status] || OVERALL_CONFIG['UNKNOWN']) : null;
+  let dynamicSubLabel = overall?.subLabel;
+  if (result?.catch_all) {
+    dynamicSubLabel = 'Catch-all domain detected. The mail server accepts arbitrary addresses, so this specific mailbox cannot be reliably verified.';
+  }
   // Separate risk scoring from display checks
   const displayChecks = result ? result.checks.filter(c => c.name !== 'Risk Scoring') : [];
   const riskCheck   = result ? result.checks.find(c => c.name === 'Risk Scoring') : null;
@@ -543,9 +548,9 @@ const SingleValidation = () => {
                   {React.createElement(overall.icon, { size: 28, color: overall.color })}
                   {overall.label}
                 </div>
-                {overall.subLabel && (
+                {dynamicSubLabel && (
                   <div style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.55)', marginTop: '0.25rem', lineHeight: 1.4 }}>
-                    {overall.subLabel}
+                    {dynamicSubLabel}
                   </div>
                 )}
                 <div className="sv-overall-email">{result.email}</div>
