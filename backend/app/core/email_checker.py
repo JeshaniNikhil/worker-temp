@@ -537,6 +537,26 @@ def check_email_detailed(raw_email: str) -> Dict[str, Any]:
             "SMTP Handshake & Mailbox Verification", "WARNING",
             f"⚠️ SMTP Connection Error (Port 25 blocked or IP binding issue): {smtp_reason}", "smtp"
         ))
+    elif smtp_cls == "SMTP_BANNER_TIMEOUT":
+        checks.append(_make_check(
+            "SMTP Handshake & Mailbox Verification", "WARNING",
+            f"⚠️ TCP connected but SMTP banner timed out. Treat as UNKNOWN.", "smtp"
+        ))
+    elif smtp_cls == "TCP_CONNECTION_FAILED":
+        checks.append(_make_check(
+            "SMTP Handshake & Mailbox Verification", "WARNING",
+            f"⚠️ TCP connection failed (port 25 blocked or host down).", "smtp"
+        ))
+    elif smtp_cls == "SMTP_TIMEOUT_AFTER_CONNECTION":
+        checks.append(_make_check(
+            "SMTP Handshake & Mailbox Verification", "WARNING",
+            f"⚠️ SMTP command timed out after connection.", "smtp"
+        ))
+    elif smtp_cls == "SOURCE_IP_BIND_ERROR":
+        checks.append(_make_check(
+            "SMTP Handshake & Mailbox Verification", "WARNING",
+            f"⚠️ Could not bind to source IP. Check VPS network config.", "smtp"
+        ))
     else:
         checks.append(_make_check(
             "SMTP Handshake & Mailbox Verification", "WARNING",
@@ -723,8 +743,8 @@ def _legacy_check_single(email: str) -> Tuple[str, str]:
         return "NOT DELIVERABLE", f"SMTP rejected (Code {code}): {reason}"
     elif cls == "TEMPORARY_FAILURE":
         return "UNKNOWN", f"Temporary SMTP failure (greylisting/rate-limit): {reason}"
-    elif cls in ("TIMEOUT", "CONNECTION_ERROR"):
-        return "UNKNOWN", f"Cannot reach mail server ({cls}). Deploy to VPS for accurate results."
+    elif cls in ("TIMEOUT", "CONNECTION_ERROR", "TCP_CONNECTION_FAILED", "SMTP_BANNER_TIMEOUT", "SMTP_TIMEOUT_AFTER_CONNECTION", "SOURCE_IP_BIND_ERROR"):
+        return "UNKNOWN", f"Cannot verify mail server ({cls}). Deploy to VPS or check network."
     else:
         return "UNKNOWN", f"Inconclusive SMTP result ({cls}): {reason}"
 
@@ -800,9 +820,8 @@ class SMTPValidator:
         self.sender = sender
         self.helo_host = helo_host
 
-        self.timeout = timeout
-        self.sender = sender
-        self.helo_host = helo_host
+
+
 
     def check_email_smtp(self, email: str) -> Dict[str, Any]:
         """
