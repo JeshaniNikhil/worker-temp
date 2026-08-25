@@ -527,10 +527,15 @@ def check_email_detailed(raw_email: str) -> Dict[str, Any]:
             "SMTP Handshake & Mailbox Verification", "WARNING",
             f"🕐 SMTP connection timed out. Port 25 may be blocked (ISP/firewall). Deploy to Contabo VPS for accurate results.", "smtp"
         ))
-    elif smtp_cls in ("CONNECTION_ERROR", "DNS_ERROR", "NO_MX"):
+    elif smtp_cls in ("DNS_ERROR", "NO_MX"):
         checks.append(_make_check(
             "SMTP Handshake & Mailbox Verification", "FAIL",
             f"❌ Cannot reach mail server ({smtp_cls}): {smtp_reason}", "smtp"
+        ))
+    elif smtp_cls == "CONNECTION_ERROR":
+        checks.append(_make_check(
+            "SMTP Handshake & Mailbox Verification", "WARNING",
+            f"⚠️ SMTP Connection Error (Port 25 blocked or IP binding issue): {smtp_reason}", "smtp"
         ))
     else:
         checks.append(_make_check(
@@ -853,10 +858,39 @@ class SMTPValidator:
         try:
             # 4. TCP Port 25 Connection
             # Bind to static IP if configured (set SMTP_SOURCE_IP=169.58.234.98 on Contabo VPS)
-            server = smtplib.SMTP(timeout=self.timeout)
-            if SMTP_SOURCE_IP:
-                # Bind outbound socket to the configured static IP
+            if SMTP_SOURCE_IP and ":" not in SMTP_SOURCE_IP:
+                class IPv4SMTP(smtplib.SMTP):
+                    def _get_socket(self, host, port, timeout):
+                        if self.debuglevel > 0:
+                            self._print_debug('connect:', (host, port))
+                        import socket
+                        info = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+                        err = None
+                        for res in info:
+                            af, socktype, proto, canonname, sa = res
+                            sock = None
+                            try:
+                                sock = socket.socket(af, socktype, proto)
+                                if timeout is not socket._GLOBAL_DEFAULT_TIMEOUT:
+                                    sock.settimeout(timeout)
+                                if self.source_address:
+                                    sock.bind(self.source_address)
+                                sock.connect(sa)
+                                return sock
+                            except socket.error as _:
+                                err = _
+                                if sock is not None:
+                                    sock.close()
+                        if err is not None:
+                            raise err
+                        raise socket.error("getaddrinfo returns an empty list")
+                server = IPv4SMTP(timeout=self.timeout)
                 server.source_address = (SMTP_SOURCE_IP, 0)
+            else:
+                server = smtplib.SMTP(timeout=self.timeout)
+                if SMTP_SOURCE_IP:
+                    server.source_address = (SMTP_SOURCE_IP, 0)
+                    
             server.connect(mx, 25)
             res["TCP latency"] = round(time.time() - conn_start, 3)
             res["TCP connection result"] = "CONNECTED"
