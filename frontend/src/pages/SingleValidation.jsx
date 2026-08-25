@@ -18,10 +18,15 @@ const STATUS_CONFIG = {
   SKIP:    { color: '#6b7280', bg: 'rgba(107,114,128,0.10)', border: 'rgba(107,114,128,0.3)', icon: SkipForward,  label: 'Skipped' },
 };
 
+// ─── Overall verdict config ───────────────────────────────────────────────────
 const OVERALL_CONFIG = {
-  VALID:   { color: '#10b981', label: 'Valid', icon: ShieldCheck },
-  RISKY:   { color: '#f59e0b', label: 'Risky', icon: ShieldAlert },
-  INVALID: { color: '#ef4444', label: 'Invalid', icon: ShieldX   },
+  'DELIVERABLE':     { color: '#10b981', glow: 'rgba(16,185,129,0.3)',  label: '✅ DELIVERABLE',     subLabel: 'Safe to send — mailbox confirmed', icon: ShieldCheck },
+  'RISKY':           { color: '#f59e0b', glow: 'rgba(245,158,11,0.3)',  label: '⚠️ RISKY',            subLabel: 'Catch-All or unverifiable — send with caution', icon: ShieldAlert },
+  'NOT DELIVERABLE': { color: '#ef4444', glow: 'rgba(239,68,68,0.3)',   label: '❌ NOT DELIVERABLE', subLabel: 'Do not send — mailbox rejected or invalid', icon: ShieldX },
+  'UNKNOWN':         { color: '#94a3b8', glow: 'rgba(148,163,184,0.3)', label: '❓ UNKNOWN',          subLabel: 'Cannot determine — port blocked or timeout', icon: Shield },
+  // Fallback for old statuses
+  'VALID':   { color: '#10b981', glow: 'rgba(16,185,129,0.3)',  label: '✅ VALID',   subLabel: '', icon: ShieldCheck },
+  'INVALID': { color: '#ef4444', glow: 'rgba(239,68,68,0.3)',   label: '❌ INVALID', subLabel: '', icon: ShieldX },
 };
 
 // ─── Check icons map ──────────────────────────────────────────────────────────
@@ -37,6 +42,7 @@ const CHECK_ICONS = {
   'Domain Age/Reputation': Shield,
   'DNS Health':           Zap,
   'Email Normalization':  CheckCircle,
+  'SMTP Handshake & Mailbox Verification': Server,
   'Risk Scoring':         ShieldCheck,
 };
 
@@ -164,7 +170,7 @@ const SingleValidation = () => {
     }
   };
 
-  const overall = result ? OVERALL_CONFIG[result.overall_status] || OVERALL_CONFIG.RISKY : null;
+  const overall = result ? (OVERALL_CONFIG[result.overall_status] || OVERALL_CONFIG['UNKNOWN']) : null;
   // Separate risk scoring from display checks
   const displayChecks = result ? result.checks.filter(c => c.name !== 'Risk Scoring') : [];
   const riskCheck   = result ? result.checks.find(c => c.name === 'Risk Scoring') : null;
@@ -528,12 +534,20 @@ const SingleValidation = () => {
             {/* Summary row */}
             <div className="sv-summary-row">
               {/* Overall status */}
-              <div className="sv-overall-card">
-                <span className="sv-overall-label">Overall Result</span>
-                <div className="sv-overall-status" style={{ color: overall.color }}>
+              <div className="sv-overall-card" style={{
+                border: `1px solid ${overall.glow || overall.color}`,
+                boxShadow: `0 0 24px ${overall.glow || 'rgba(0,0,0,0.3)'}`,
+              }}>
+                <span className="sv-overall-label">📬 Campaign Decision</span>
+                <div className="sv-overall-status" style={{ color: overall.color, fontSize: '1.5rem', fontWeight: 800 }}>
                   {React.createElement(overall.icon, { size: 28, color: overall.color })}
                   {overall.label}
                 </div>
+                {overall.subLabel && (
+                  <div style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.55)', marginTop: '0.25rem', lineHeight: 1.4 }}>
+                    {overall.subLabel}
+                  </div>
+                )}
                 <div className="sv-overall-email">{result.email}</div>
                 {result.execution_time_ms && (
                   <div className="sv-timing">

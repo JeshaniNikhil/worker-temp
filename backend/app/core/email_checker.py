@@ -1,11 +1,24 @@
 import re
+import os
 import dns.resolver
 import socket
+import smtplib
+import random
+import string
+import time
 import logging
 import unicodedata
+from datetime import datetime
 from typing import Tuple, Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Config: Bind outbound SMTP to static IP on VPS (set SMTP_SOURCE_IP env var)
+# On Contabo VPS: export SMTP_SOURCE_IP=169.58.234.98
+# Locally: leave unset (empty string = OS picks interface)
+# ---------------------------------------------------------------------------
+SMTP_SOURCE_IP = os.environ.get("SMTP_SOURCE_IP", "").strip()
 
 # ---------------------------------------------------------------------------
 # Reference lists
@@ -185,9 +198,20 @@ def _make_check(name: str, status: str, detail: str, category: str = "") -> Dict
 # ---------------------------------------------------------------------------
 
 def check_syntax(email: str) -> Dict[str, Any]:
-    pattern = r"^[a-zA-Z0-9_.+\-\/]+@[a-zA-Z0-9\-]+(\.[a-zA-Z0-9\-]+)*\.[a-zA-Z]{2,}$"
+    # RFC 5321-compliant: local part allows letters, digits, and .!#$%&'*+/=?^_`{|}~-
+    # Domain must have at least one dot and a valid TLD (2+ chars)
+    pattern = r"^[a-zA-Z0-9!#$%&'*+/=?^_`{|}~.\-]+@[a-zA-Z0-9\-]+(\.[a-zA-Z0-9\-]+)*\.[a-zA-Z]{2,}$"
+    if not email or "@" not in email:
+        return _make_check("Syntax", "FAIL", f"'{email}' is missing the '@' symbol.", "format")
+    local, _, domain = email.partition("@")
+    if not local:
+        return _make_check("Syntax", "FAIL", "Local part (before @) is empty.", "format")
+    if not domain or "." not in domain:
+        return _make_check("Syntax", "FAIL", f"Domain '{domain}' is missing or has no TLD.", "format")
+    if ".." in email:
+        return _make_check("Syntax", "FAIL", "Email contains consecutive dots '..' which is invalid.", "format")
     if re.match(pattern, email):
-        return _make_check("Syntax", "PASS", f"'{email}' follows the name@domain.com format.", "format")
+        return _make_check("Syntax", "PASS", f"'{email}' is a valid email format.", "format")
     return _make_check("Syntax", "FAIL", f"'{email}' is not a valid email format. Expected: name@domain.com", "format")
 
 
@@ -350,6 +374,7 @@ def compute_risk_score(checks: List[Dict[str, Any]]) -> Dict[str, Any]:
         "Role Account": 5,
         "Typo Detection": 5,
         "DNS Health": 5,
+        "SMTP Handshake & Mailbox Verification": 60,
     }
     risk = 0
     reasons = []
@@ -364,7 +389,10 @@ def compute_risk_score(checks: List[Dict[str, Any]]) -> Dict[str, Any]:
             risk += weight * 0.4
             reasons.append(f"{check_name} warning")
 
-    risk = min(int(risk), 100)
+    if check_map.get("SMTP Handshake & Mailbox Verification") == "FAIL":
+        risk = 100
+    else:
+        risk = min(int(risk), 100)
 
     if risk == 0:
         label = "Very Low Risk"
@@ -467,7 +495,50 @@ def check_email_detailed(raw_email: str) -> Dict[str, Any]:
     # 11. Email normalization
     checks.append(check_normalization(raw_email, normalized))
 
-    # 12. Risk scoring
+    # 12. Real SMTP Handshake & Mailbox Verification
+    validator = SMTPValidator(timeout=10.0)
+    smtp_res = validator.check_email_smtp(normalized)
+    smtp_cls = smtp_res.get("Final classification", "UNKNOWN")
+    smtp_reason = smtp_res.get("Reason", "")
+    smtp_code = smtp_res.get("SMTP response code", "")
+
+    if smtp_cls in ("VALID", "ACCEPTED"):
+        checks.append(_make_check(
+            "SMTP Handshake & Mailbox Verification", "PASS",
+            f"✅ Mailbox exists and accepted RCPT TO (Code {smtp_code}). This email is deliverable.", "smtp"
+        ))
+    elif smtp_cls == "INVALID":
+        checks.append(_make_check(
+            "SMTP Handshake & Mailbox Verification", "FAIL",
+            f"❌ SMTP server explicitly rejected this address (Code {smtp_code}): {smtp_reason}. NOT DELIVERABLE.", "smtp"
+        ))
+    elif smtp_cls == "CATCH_ALL":
+        checks.append(_make_check(
+            "SMTP Handshake & Mailbox Verification", "WARNING",
+            f"⚠️ Catch-All domain detected: server accepts all addresses including random ones. Cannot verify specific mailbox. Treat as RISKY.", "smtp"
+        ))
+    elif smtp_cls == "TEMPORARY_FAILURE":
+        checks.append(_make_check(
+            "SMTP Handshake & Mailbox Verification", "WARNING",
+            f"⏳ Temporary SMTP failure (greylisting/rate-limit). Try again later. Code {smtp_code}: {smtp_reason}", "smtp"
+        ))
+    elif smtp_cls == "TIMEOUT":
+        checks.append(_make_check(
+            "SMTP Handshake & Mailbox Verification", "WARNING",
+            f"🕐 SMTP connection timed out. Port 25 may be blocked (ISP/firewall). Deploy to Contabo VPS for accurate results.", "smtp"
+        ))
+    elif smtp_cls in ("CONNECTION_ERROR", "DNS_ERROR", "NO_MX"):
+        checks.append(_make_check(
+            "SMTP Handshake & Mailbox Verification", "FAIL",
+            f"❌ Cannot reach mail server ({smtp_cls}): {smtp_reason}", "smtp"
+        ))
+    else:
+        checks.append(_make_check(
+            "SMTP Handshake & Mailbox Verification", "WARNING",
+            f"SMTP check returned inconclusive result ({smtp_cls}): {smtp_reason}", "smtp"
+        ))
+
+    # 13. Risk scoring
     risk = compute_risk_score(checks)
     checks.append(risk)
 
@@ -509,14 +580,40 @@ def check_domain_reputation(domain: str) -> Dict[str, Any]:
 
 
 def _build_response(raw_email: str, normalized: str, checks: List[Dict[str, Any]], risk: Dict[str, Any]) -> Dict[str, Any]:
-    # Overall status based on risk score
+    """Build the final response. Overall status is driven primarily by SMTP result."""
     score = risk.get("score", 0)
-    if score >= 71:
-        overall = "INVALID"
-    elif score >= 25:
-        overall = "RISKY"
+    check_map = {c["name"]: c for c in checks}
+    smtp_check = check_map.get("SMTP Handshake & Mailbox Verification", {})
+    smtp_status = smtp_check.get("status", "SKIP")
+    smtp_detail = smtp_check.get("detail", "")
+    syntax_status = check_map.get("Syntax", {}).get("status", "PASS")
+    mx_status = check_map.get("MX Record", {}).get("status", "PASS")
+
+    # Determine overall status
+    if syntax_status == "FAIL" or mx_status == "FAIL":
+        overall = "NOT DELIVERABLE"
+    elif smtp_status == "FAIL":
+        overall = "NOT DELIVERABLE"
+    elif smtp_status == "PASS":
+        # Check if it was a catch-all (detail contains Catch-All)
+        if "catch-all" in smtp_detail.lower() or "catch_all" in smtp_detail.lower():
+            overall = "RISKY"
+        else:
+            overall = "DELIVERABLE"
+    elif smtp_status == "WARNING":
+        # Timeout, temporary failure, catch-all
+        if "catch-all" in smtp_detail.lower() or "catch_all" in smtp_detail.lower():
+            overall = "RISKY"
+        else:
+            overall = "UNKNOWN"
     else:
-        overall = "VALID"
+        # SKIP (no SMTP check done)
+        if score >= 71:
+            overall = "NOT DELIVERABLE"
+        elif score >= 35:
+            overall = "RISKY"
+        else:
+            overall = "DELIVERABLE"
 
     return {
         "email": raw_email,
@@ -526,6 +623,7 @@ def _build_response(raw_email: str, normalized: str, checks: List[Dict[str, Any]
         "risk_label": risk.get("label", ""),
         "checks": checks,
     }
+
 
 
 # ---------------------------------------------------------------------------
@@ -564,7 +662,7 @@ def check_email(email: str) -> Tuple[str, str]:
     Returns (status, reason).
     """
     if not email or not isinstance(email, str):
-        return "NOT VALID", "Empty or invalid input"
+        return "NOT DELIVERABLE", "Empty or invalid input"
 
     email = email.strip().rstrip(",;- ")
 
@@ -577,17 +675,17 @@ def check_email(email: str) -> Tuple[str, str]:
             reasons = []
             for sub_email in sub_emails:
                 st, reas = _legacy_check_single(sub_email)
-                if st == "NOT VALID":
+                if st == "NOT DELIVERABLE":
                     has_invalid = True
-                elif st in ("UNKNOWN", "DISPOSABLE"):
+                elif st in ("UNKNOWN", "RISKY"):
                     has_unknown = True
                 reasons.append(f"{sub_email}: {reas}")
             if has_invalid:
-                return "NOT VALID", " | ".join(reasons)
+                return "NOT DELIVERABLE", " | ".join(reasons)
             elif has_unknown:
                 return "UNKNOWN", " | ".join(reasons)
             else:
-                return "VALID", "All emails are valid"
+                return "DELIVERABLE", "All emails deliverable"
 
     return _legacy_check_single(email)
 
@@ -595,23 +693,253 @@ def check_email(email: str) -> Tuple[str, str]:
 def _legacy_check_single(email: str) -> Tuple[str, str]:
     """Internal single-email check for legacy batch use."""
     if not is_valid_syntax(email):
-        return "NOT VALID", "Invalid email syntax"
+        return "NOT DELIVERABLE", "Invalid email syntax"
     try:
         local_part, domain = email.split("@")
     except ValueError:
-        return "NOT VALID", "Invalid email format"
+        return "NOT DELIVERABLE", "Invalid email format"
 
     domain = domain.lower()
 
     if domain in DISPOSABLE_DOMAINS:
-        return "DISPOSABLE", "Disposable email domain"
+        return "NOT DELIVERABLE", "Disposable email domain"
 
-    try:
-        mx_records = get_mx_records(domain)
-        if not mx_records:
-            return "NOT VALID", "Domain does not exist or has no MX records"
-    except dns.exception.Timeout:
-        return "UNKNOWN", "DNS lookup timed out"
+    validator = SMTPValidator(timeout=10.0)
+    res = validator.check_email_smtp(email)
+    cls = res.get("Final classification", "UNKNOWN")
+    reason = res.get("Reason", "")
+    code = res.get("SMTP response code", "")
 
-    # No SMTP for legacy either — return VALID if DNS passes
-    return "VALID", "Domain and MX records verified successfully"
+    if cls in ("VALID", "ACCEPTED"):
+        return "DELIVERABLE", f"SMTP RCPT TO accepted (Code {code}). Mailbox confirmed."
+    elif cls == "CATCH_ALL":
+        return "RISKY", "Catch-All domain: server accepts all addresses. Specific mailbox unverifiable."
+    elif cls in ("INVALID", "INVALID_SYNTAX", "NO_MX", "DNS_ERROR"):
+        return "NOT DELIVERABLE", f"SMTP rejected (Code {code}): {reason}"
+    elif cls == "TEMPORARY_FAILURE":
+        return "UNKNOWN", f"Temporary SMTP failure (greylisting/rate-limit): {reason}"
+    elif cls in ("TIMEOUT", "CONNECTION_ERROR"):
+        return "UNKNOWN", f"Cannot reach mail server ({cls}). Deploy to VPS for accurate results."
+    else:
+        return "UNKNOWN", f"Inconclusive SMTP result ({cls}): {reason}"
+
+
+# ---------------------------------------------------------------------------
+# Advanced SMTP Validation
+# ---------------------------------------------------------------------------
+
+def generate_random_string(length=15):
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
+
+class SMTPValidator:
+    def __init__(self, timeout=10.0, sender="validator@example.com", helo_host="example.com"):
+        self.timeout = timeout
+        self.sender = sender
+        self.helo_host = helo_host
+
+    def check_email_smtp(self, email: str) -> Dict[str, Any]:
+        """
+        Perform a full SMTP check on the given email address.
+        Returns a dict with classification and details.
+        """
+        start_time = time.time()
+        result = {
+            "Email": email,
+            "Domain": "",
+            "MX records": [],
+            "Selected MX": "",
+            "MX priority": "",
+            "DNS result": "",
+            "TCP connection result": "",
+            "TCP latency": 0.0,
+            "SMTP banner": "",
+            "EHLO response": "",
+            "MAIL FROM response": "",
+            "RCPT TO response": "",
+            "SMTP response code": "",
+            "Final classification": "UNKNOWN",
+            "Reason": "",
+            "Timestamp": datetime.now().isoformat()
+        }
+
+        # 1. Syntax check (reuse existing)
+        if not is_valid_syntax(email):
+            result["Final classification"] = "INVALID_SYNTAX"
+            result["Reason"] = "Invalid email format"
+            return result
+
+        try:
+            local_part, domain = email.split("@")
+            result["Domain"] = domain
+        except ValueError:
+            result["Final classification"] = "INVALID_SYNTAX"
+            result["Reason"] = "Could not split local and domain"
+            return result
+
+        # 2. MX Record Selection
+        try:
+            answers = resolver.resolve(domain, "MX")
+            records = sorted(answers, key=lambda r: r.preference)
+            mx_list = [(r.preference, str(r.exchange).rstrip(".")) for r in records]
+            result["MX records"] = [mx[1] for mx in mx_list]
+            result["DNS result"] = "SUCCESS"
+        except dns.resolver.NXDOMAIN:
+            result["Final classification"] = "DNS_ERROR"
+            result["Reason"] = "NXDOMAIN - Domain does not exist"
+            result["DNS result"] = "NXDOMAIN"
+            return result
+        except dns.resolver.NoAnswer:
+            # Fallback to A record (implicit MX)
+            try:
+                a_answers = resolver.resolve(domain, "A")
+                mx_list = [(0, domain)]
+                result["MX records"] = [domain]
+                result["DNS result"] = "SUCCESS (A Record Fallback)"
+            except Exception:
+                result["Final classification"] = "NO_MX"
+                result["Reason"] = "No MX or A records found"
+                result["DNS result"] = "NO_MX"
+                return result
+        except dns.exception.Timeout:
+            result["Final classification"] = "DNS_ERROR"
+            result["Reason"] = "DNS lookup timed out"
+            result["DNS result"] = "TIMEOUT"
+            return result
+        except Exception as e:
+            result["Final classification"] = "DNS_ERROR"
+            result["Reason"] = f"DNS Error: {str(e)}"
+            result["DNS result"] = "ERROR"
+            return result
+
+        if not mx_list:
+            result["Final classification"] = "NO_MX"
+            result["Reason"] = "No MX records found"
+            result["DNS result"] = "NO_MX"
+            return result
+
+        # 3. SMTP checking over MX records
+        for pref, mx in mx_list:
+            result["Selected MX"] = mx
+            result["MX priority"] = pref
+            
+            smtp_res = self._probe_mx(mx, email, result, start_time)
+            result.update(smtp_res)
+            
+            # If we get a definitive connection error or timeout, we might try next MX
+            if smtp_res["Final classification"] in ("CONNECTION_ERROR", "TIMEOUT", "SMTP_ERROR"):
+                # Try next MX if available
+                continue
+            
+            # If we got a definitive answer (VALID, INVALID, TEMPORARY_FAILURE, etc.), stop checking MXs
+            break
+            
+        # Catch-all check if the email was accepted
+        if result["Final classification"] in ("VALID", "ACCEPTED"):
+            random_email = f"random-validation-{generate_random_string()}@{domain}"
+            catch_all_res = self._probe_mx(result["Selected MX"], random_email, {}, start_time, is_catch_all_probe=True)
+            if catch_all_res.get("Final classification") in ("VALID", "ACCEPTED"):
+                result["Final classification"] = "CATCH_ALL"
+                result["Reason"] = "Domain accepts emails to random non-existent addresses (Catch-All)"
+                
+        return result
+
+    def _probe_mx(self, mx: str, email: str, result: dict, start_time: float, is_catch_all_probe: bool = False) -> dict:
+        if is_catch_all_probe:
+            res = {}
+        else:
+            res = result
+            
+        conn_start = time.time()
+        try:
+            # 4. TCP Port 25 Connection
+            # Bind to static IP if configured (set SMTP_SOURCE_IP=169.58.234.98 on Contabo VPS)
+            server = smtplib.SMTP(timeout=self.timeout)
+            if SMTP_SOURCE_IP:
+                # Bind outbound socket to the configured static IP
+                server.source_address = (SMTP_SOURCE_IP, 0)
+            server.connect(mx, 25)
+            res["TCP latency"] = round(time.time() - conn_start, 3)
+            res["TCP connection result"] = "CONNECTED"
+
+            # Read banner (smtplib checks for 220 internally on connect)
+            res["SMTP banner"] = "220"
+
+            # 5. EHLO (preferred over HELO — enables extended SMTP features)
+            try:
+                code, msg = server.ehlo(self.helo_host)
+                if code != 250:
+                    code, msg = server.helo(self.helo_host)
+            except Exception:
+                code, msg = server.helo(self.helo_host)
+            res["EHLO response"] = f"{code} {msg.decode('utf-8', errors='ignore')}"
+
+            # 6. MAIL FROM
+            code, msg = server.docmd("MAIL FROM:", f"<{self.sender}>")
+            res["MAIL FROM response"] = f"{code} {msg.decode('utf-8', errors='ignore')}"
+
+            # 7. RCPT TO — this is the mailbox existence check
+            code, msg = server.docmd("RCPT TO:", f"<{email}>")
+            resp_str = f"{code} {msg.decode('utf-8', errors='ignore')}"
+            res["RCPT TO response"] = resp_str
+            res["SMTP response code"] = str(code)
+
+            # 8. Classification based on RCPT TO response
+            self._classify_response(code, resp_str, res)
+
+            # 9. QUIT gracefully (do NOT send DATA)
+            try:
+                server.quit()
+            except Exception:
+                pass
+
+        except socket.timeout:
+            res["TCP latency"] = round(time.time() - conn_start, 3)
+            res["TCP connection result"] = "TIMEOUT"
+            res["Final classification"] = "TIMEOUT"
+            res["Reason"] = "TCP connection or SMTP command timed out"
+        except ConnectionRefusedError:
+            res["TCP latency"] = round(time.time() - conn_start, 3)
+            res["TCP connection result"] = "CONNECTION_REFUSED"
+            res["Final classification"] = "CONNECTION_ERROR"
+            res["Reason"] = "Connection refused by MX server"
+        except socket.error as e:
+            res["TCP latency"] = round(time.time() - conn_start, 3)
+            res["TCP connection result"] = "NETWORK_ERROR"
+            res["Final classification"] = "CONNECTION_ERROR"
+            res["Reason"] = f"Network/Socket error: {str(e)}"
+        except smtplib.SMTPConnectError as e:
+            res["TCP latency"] = round(time.time() - conn_start, 3)
+            res["TCP connection result"] = "SMTP_CONNECT_ERROR"
+            res["Final classification"] = "CONNECTION_ERROR"
+            res["Reason"] = f"SMTP Connect Error: {e.msg}"
+        except smtplib.SMTPServerDisconnected as e:
+            res["Final classification"] = "CONNECTION_ERROR"
+            res["Reason"] = "SMTP Server Disconnected unexpectedly"
+        except smtplib.SMTPException as e:
+            res["Final classification"] = "SMTP_ERROR"
+            res["Reason"] = f"SMTP Exception: {str(e)}"
+        except Exception as e:
+            res["Final classification"] = "UNKNOWN"
+            res["Reason"] = f"Unexpected Error: {str(e)}"
+            
+        return res
+
+    def _classify_response(self, code: int, resp_str: str, res: dict):
+        if code in (250, 251, 252):
+            res["Final classification"] = "VALID" # or ACCEPTED
+            res["Reason"] = "SMTP recipient accepted"
+        elif code in (550, 551, 552, 553, 511):
+            res["Final classification"] = "INVALID"
+            res["Reason"] = "SMTP recipient rejected / mailbox does not exist"
+        elif code in (421, 450, 451, 452):
+            res["Final classification"] = "TEMPORARY_FAILURE"
+            res["Reason"] = "Temporary SMTP failure (e.g., rate limit, greylisting, mailbox full)"
+        else:
+            # Other 5xx errors might mean invalid or server misconfiguration.
+            if 500 <= code < 600:
+                res["Final classification"] = "INVALID"
+                res["Reason"] = f"SMTP fatal error: {resp_str}"
+            else:
+                res["Final classification"] = "UNKNOWN"
+                res["Reason"] = f"Unrecognized SMTP code: {code}"
+

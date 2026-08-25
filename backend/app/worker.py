@@ -68,15 +68,15 @@ def process_csv_validation(self, job_id: int, file_content: str, email_column: s
                     status, reason = "UNKNOWN", f"Check execution failed: {exc}"
                 
                 # Update counts
-                if status == "VALID":
+                if status == "DELIVERABLE":
                     valid_count += 1
-                elif status == "NOT VALID":
+                elif status == "NOT DELIVERABLE":
                     invalid_count += 1
-                elif status == "DISPOSABLE":
-                    disposable_count += 1
+                elif status in ("RISKY", "UNKNOWN"):
+                    unknown_count += 1
                 else:
                     unknown_count += 1
-                    
+
                 processed += 1
                 
                 # Save result

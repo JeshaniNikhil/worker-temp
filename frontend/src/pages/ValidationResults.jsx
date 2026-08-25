@@ -126,8 +126,8 @@ const ValidationResults = () => {
                     </span>
                   </td>
                   <td>{j.processed_records} / {j.total_records}</td>
-                  <td style={{ color: 'var(--success)' }}>{j.valid_count}</td>
-                  <td style={{ color: 'var(--danger)' }}>{j.invalid_count}</td>
+                  <td style={{ color: 'var(--success)' }}>{j.valid_count} ✅</td>
+                  <td style={{ color: 'var(--danger)' }}>{j.invalid_count} ❌</td>
                   <td>{new Date(j.created_at).toLocaleDateString()}</td>
                   <td>
                     <Link to={`/results/${j.id}`} className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>
@@ -191,15 +191,15 @@ const ValidationResults = () => {
           </div>
         </div>
         <div className="card" style={{ padding: '1rem' }}>
-          <div className="stat-title">Valid Emails</div>
+          <div className="stat-title">Deliverable</div>
           <div className="stat-value" style={{ fontSize: '1.5rem', color: 'var(--success)' }}>
-            {job?.valid_count}
+            ✅ {job?.valid_count}
           </div>
         </div>
         <div className="card" style={{ padding: '1rem' }}>
-          <div className="stat-title">Not Valid</div>
+          <div className="stat-title">Not Deliverable</div>
           <div className="stat-value" style={{ fontSize: '1.5rem', color: 'var(--danger)' }}>
-            {job?.invalid_count}
+            ❌ {job?.invalid_count}
           </div>
         </div>
       </div>
@@ -222,10 +222,10 @@ const ValidationResults = () => {
               style={{ width: '150px' }}
             >
               <option value="ALL">All Statuses</option>
-              <option value="VALID">Valid</option>
-              <option value="NOT VALID">Not Valid</option>
-              <option value="DISPOSABLE">Disposable</option>
-              <option value="UNKNOWN">Unknown</option>
+              <option value="DELIVERABLE">✅ Deliverable</option>
+              <option value="RISKY">⚠️ Risky</option>
+              <option value="NOT DELIVERABLE">❌ Not Deliverable</option>
+              <option value="UNKNOWN">❓ Unknown</option>
             </select>
             <select 
               className="form-control" 
@@ -269,12 +269,15 @@ const ValidationResults = () => {
                   ))}
                   <td>
                     <span className={`badge badge-${
-                      r.status === 'VALID' ? 'success' : 
-                      r.status === 'NOT VALID' ? 'danger' : 
-                      r.status === 'DISPOSABLE' ? 'warning' :
-                      r.status === 'SKIPPED' ? 'secondary' : 'info'
-                    }`}>
-                      {r.status}
+                      r.status === 'DELIVERABLE' ? 'success' :
+                      r.status === 'NOT DELIVERABLE' ? 'danger' :
+                      r.status === 'RISKY' ? 'warning' :
+                      'info'
+                    }`} style={{ fontWeight: 700 }}>
+                      {r.status === 'DELIVERABLE' ? '✅ DELIVERABLE' :
+                       r.status === 'NOT DELIVERABLE' ? '❌ NOT DELIVERABLE' :
+                       r.status === 'RISKY' ? '⚠️ RISKY' :
+                       r.status === 'UNKNOWN' ? '❓ UNKNOWN' : r.status}
                     </span>
                   </td>
                   <td>{r.reason}</td>
