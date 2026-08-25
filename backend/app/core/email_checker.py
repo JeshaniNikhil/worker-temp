@@ -736,8 +736,70 @@ def _legacy_check_single(email: str) -> Tuple[str, str]:
 def generate_random_string(length=15):
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
 
+class CustomSMTP(smtplib.SMTP):
+    """Custom SMTP subclass to handle explicit IPv4 binding, separate timeouts, and state tracking."""
+    def __init__(self, connect_timeout=15, banner_timeout=20, command_timeout=15, **kwargs):
+        self.connect_timeout = connect_timeout
+        self.banner_timeout = banner_timeout
+        self.command_timeout = command_timeout
+        self.tcp_connected = False
+        self.banner_received = False
+        self.dest_ip = None
+        self.source_ip = None
+        self.bind_error = None
+        super().__init__(**kwargs)
+
+    def _get_socket(self, host, port, timeout):
+        if self.debuglevel > 0:
+            self._print_debug('connect:', (host, port))
+        import socket
+        info = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+        err = None
+        for res in info:
+            af, socktype, proto, canonname, sa = res
+            sock = None
+            try:
+                sock = socket.socket(af, socktype, proto)
+                sock.settimeout(self.connect_timeout)
+                if self.source_address:
+                    try:
+                        sock.bind(self.source_address)
+                        self.source_ip = self.source_address[0]
+                    except socket.error as e:
+                        self.bind_error = e
+                        raise
+                sock.connect(sa)
+                self.dest_ip = sa[0]
+                self.tcp_connected = True
+                
+                # Switch to banner timeout for the getreply() call in connect()
+                sock.settimeout(self.banner_timeout)
+                return sock
+            except socket.error as _:
+                err = _
+                if sock is not None:
+                    sock.close()
+        if err is not None:
+            raise err
+        raise socket.error("getaddrinfo returns an empty list")
+
+    def connect(self, host='localhost', port=0, source_address=None):
+        res = super().connect(host, port, source_address)
+        # If we got here, getreply (banner) succeeded.
+        self.banner_received = True
+        # Switch to command timeout for remaining commands (EHLO, MAIL FROM, etc)
+        if self.sock:
+            self.sock.settimeout(self.command_timeout)
+        return res
+
 class SMTPValidator:
-    def __init__(self, timeout=10.0, sender="validator@example.com", helo_host="example.com"):
+    def __init__(self, connect_timeout=15.0, banner_timeout=20.0, command_timeout=15.0, sender="validator@example.com", helo_host="validator.wolfgroupindia.com"):
+        self.connect_timeout = connect_timeout
+        self.banner_timeout = banner_timeout
+        self.command_timeout = command_timeout
+        self.sender = sender
+        self.helo_host = helo_host
+
         self.timeout = timeout
         self.sender = sender
         self.helo_host = helo_host
@@ -855,45 +917,35 @@ class SMTPValidator:
             res = result
             
         conn_start = time.time()
+        server = None
+        
+        # Logging prefix
+        log_domain = result.get("Domain", "")
+        logger.info(f"[DNS] domain={log_domain}")
+        logger.info(f"[MX] {mx}")
+
         try:
             # 4. TCP Port 25 Connection
-            # Bind to static IP if configured (set SMTP_SOURCE_IP=169.58.234.98 on Contabo VPS)
+            server = CustomSMTP(
+                connect_timeout=self.connect_timeout,
+                banner_timeout=self.banner_timeout,
+                command_timeout=self.command_timeout
+            )
+            
             if SMTP_SOURCE_IP and ":" not in SMTP_SOURCE_IP:
-                class IPv4SMTP(smtplib.SMTP):
-                    def _get_socket(self, host, port, timeout):
-                        if self.debuglevel > 0:
-                            self._print_debug('connect:', (host, port))
-                        import socket
-                        info = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
-                        err = None
-                        for res in info:
-                            af, socktype, proto, canonname, sa = res
-                            sock = None
-                            try:
-                                sock = socket.socket(af, socktype, proto)
-                                if timeout is not socket._GLOBAL_DEFAULT_TIMEOUT:
-                                    sock.settimeout(timeout)
-                                if self.source_address:
-                                    sock.bind(self.source_address)
-                                sock.connect(sa)
-                                return sock
-                            except socket.error as _:
-                                err = _
-                                if sock is not None:
-                                    sock.close()
-                        if err is not None:
-                            raise err
-                        raise socket.error("getaddrinfo returns an empty list")
-                server = IPv4SMTP(timeout=self.timeout)
                 server.source_address = (SMTP_SOURCE_IP, 0)
-            else:
-                server = smtplib.SMTP(timeout=self.timeout)
-                if SMTP_SOURCE_IP:
-                    server.source_address = (SMTP_SOURCE_IP, 0)
-                    
+                
             server.connect(mx, 25)
+            
             res["TCP latency"] = round(time.time() - conn_start, 3)
             res["TCP connection result"] = "CONNECTED"
+            
+            # Log successful connection
+            src = server.source_ip or "auto"
+            dst = server.dest_ip or "unknown"
+            logger.info(f"[CONNECT] source={src} destination={dst}:25")
+            logger.info(f"[TCP] connected={server.tcp_connected}")
+            logger.info(f"[BANNER] received={server.banner_received}")
 
             # Read banner (smtplib checks for 220 internally on connect)
             res["SMTP banner"] = "220"
@@ -928,19 +980,44 @@ class SMTPValidator:
 
         except socket.timeout:
             res["TCP latency"] = round(time.time() - conn_start, 3)
-            res["TCP connection result"] = "TIMEOUT"
-            res["Final classification"] = "TIMEOUT"
-            res["Reason"] = "TCP connection or SMTP command timed out"
+            if server and getattr(server, 'tcp_connected', False):
+                res["TCP connection result"] = "CONNECTED"
+                
+                src = getattr(server, 'source_ip', 'auto')
+                dst = getattr(server, 'dest_ip', 'unknown')
+                logger.info(f"[CONNECT] source={src} destination={dst}:25")
+                logger.info(f"[TCP] connected=True")
+                logger.info(f"[BANNER] received={getattr(server, 'banner_received', False)}")
+                
+                if not getattr(server, 'banner_received', False):
+                    res["Final classification"] = "SMTP_BANNER_TIMEOUT"
+                    res["Reason"] = "TCP connection succeeded, but SMTP banner timed out"
+                    logger.info(f"[RESULT] UNKNOWN / SMTP_BANNER_TIMEOUT")
+                else:
+                    res["Final classification"] = "SMTP_TIMEOUT_AFTER_CONNECTION"
+                    res["Reason"] = "SMTP command timed out after successful connection"
+            else:
+                res["TCP connection result"] = "TIMEOUT"
+                res["Final classification"] = "TCP_CONNECTION_FAILED"
+                res["Reason"] = "TCP connection timed out"
+                logger.info(f"[TCP] connected=False")
         except ConnectionRefusedError:
             res["TCP latency"] = round(time.time() - conn_start, 3)
             res["TCP connection result"] = "CONNECTION_REFUSED"
-            res["Final classification"] = "CONNECTION_ERROR"
+            res["Final classification"] = "TCP_CONNECTION_FAILED"
             res["Reason"] = "Connection refused by MX server"
+            logger.info(f"[TCP] connected=False")
         except socket.error as e:
             res["TCP latency"] = round(time.time() - conn_start, 3)
-            res["TCP connection result"] = "NETWORK_ERROR"
-            res["Final classification"] = "CONNECTION_ERROR"
-            res["Reason"] = f"Network/Socket error: {str(e)}"
+            if server and getattr(server, 'bind_error', None) is e:
+                res["TCP connection result"] = "BIND_ERROR"
+                res["Final classification"] = "SOURCE_IP_BIND_ERROR"
+                res["Reason"] = f"Failed to bind to source IP: {str(e)}"
+            else:
+                res["TCP connection result"] = "NETWORK_ERROR"
+                res["Final classification"] = "TCP_CONNECTION_FAILED"
+                res["Reason"] = f"Network/Socket error: {str(e)}"
+            logger.info(f"[TCP] connected=False")
         except smtplib.SMTPConnectError as e:
             res["TCP latency"] = round(time.time() - conn_start, 3)
             res["TCP connection result"] = "SMTP_CONNECT_ERROR"
