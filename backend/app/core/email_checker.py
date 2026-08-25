@@ -367,53 +367,113 @@ def check_normalization(email: str, normalized: str) -> Dict[str, Any]:
 def compute_risk_score(checks: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Compute a 0–100 risk score. Higher = riskier."""
     weights = {
-        "Syntax": 25,
-        "Domain Existence": 20,
-        "MX Record": 15,
+        "Syntax": 100,
+        "Domain Existence": 100,
+        "MX Record": 100,
         "A Record": 5,
-        "Disposable Domain": 15,
+        "Disposable Domain": 50,
         "Free Email Provider": 5,
-        "Role Account": 5,
-        "Typo Detection": 5,
-        "DNS Health": 5,
-        "SMTP Handshake & Mailbox Verification": 60,
+        "Role Account": 15,
+        "Typo Detection": 20,
+        "DNS Health": 10,
+        "SMTP Handshake & Mailbox Verification": 100,
     }
     risk = 0
     reasons = []
-    check_map = {c["name"]: c["status"] for c in checks}
+    check_map = {c["name"]: c for c in checks}
+    status_map = {c["name"]: c["status"] for c in checks}
 
+    # Hard gate checks
+    if status_map.get("Syntax") == "FAIL":
+        detail = check_map.get("Syntax", {}).get("detail", "Invalid email syntax.")
+        return {
+            "name": "Risk Scoring",
+            "status": "FAIL",
+            "detail": f"Syntax validation failed: {detail}",
+            "category": "summary",
+            "score": 100,
+            "label": "High Risk",
+            "risk_level": "HIGH",
+            "campaign_decision": "DO_NOT_SEND",
+        }
+
+    if status_map.get("Domain Existence") == "FAIL":
+        return {
+            "name": "Risk Scoring",
+            "status": "FAIL",
+            "detail": "Domain existence check failed. Domain does not exist.",
+            "category": "summary",
+            "score": 100,
+            "label": "High Risk",
+            "risk_level": "HIGH",
+            "campaign_decision": "DO_NOT_SEND",
+        }
+
+    if status_map.get("MX Record") == "FAIL":
+        return {
+            "name": "Risk Scoring",
+            "status": "FAIL",
+            "detail": "MX record check failed. Domain cannot receive email.",
+            "category": "summary",
+            "score": 100,
+            "label": "High Risk",
+            "risk_level": "HIGH",
+            "campaign_decision": "DO_NOT_SEND",
+        }
+
+    if status_map.get("SMTP Handshake & Mailbox Verification") == "FAIL":
+        return {
+            "name": "Risk Scoring",
+            "status": "FAIL",
+            "detail": "SMTP server explicitly rejected mailbox.",
+            "category": "summary",
+            "score": 100,
+            "label": "High Risk",
+            "risk_level": "HIGH",
+            "campaign_decision": "DO_NOT_SEND",
+        }
+
+    # Soft weights for other checks
     for check_name, weight in weights.items():
-        status = check_map.get(check_name, "SKIP")
-        if status == "FAIL":
+        if check_name in ("Syntax", "Domain Existence", "MX Record", "SMTP Handshake & Mailbox Verification"):
+            continue
+        st = status_map.get(check_name, "SKIP")
+        if st == "FAIL":
             risk += weight
             reasons.append(f"{check_name} failed")
-        elif status == "WARNING":
-            risk += weight * 0.4
+        elif st == "WARNING":
+            risk += weight * 0.5
             reasons.append(f"{check_name} warning")
 
-    if check_map.get("SMTP Handshake & Mailbox Verification") == "FAIL":
-        risk = 100
-    else:
-        risk = min(int(risk), 100)
+    smtp_st = status_map.get("SMTP Handshake & Mailbox Verification", "SKIP")
+    if smtp_st == "WARNING":
+        risk += 35
+        reasons.append("SMTP warning / catch-all / timeout")
+
+    risk = min(int(risk), 100)
 
     if risk == 0:
         label = "Very Low Risk"
+        risk_level = "LOW"
+        decision = "SAFE_TO_SEND"
         status = "PASS"
         detail = "All checks passed. This email looks safe to use."
     elif risk <= 20:
         label = "Low Risk"
+        risk_level = "LOW"
+        decision = "SAFE_TO_SEND"
         status = "PASS"
         detail = "Minor issues detected but email is likely deliverable."
-    elif risk <= 45:
+    elif risk <= 70:
         label = "Medium Risk"
+        risk_level = "MEDIUM"
+        decision = "SEND_WITH_CAUTION"
         status = "WARNING"
         detail = "Some concerns: " + "; ".join(reasons[:3])
-    elif risk <= 70:
-        label = "High Risk"
-        status = "WARNING"
-        detail = "Multiple issues: " + "; ".join(reasons[:4])
     else:
-        label = "Very High Risk"
+        label = "High Risk"
+        risk_level = "HIGH"
+        decision = "DO_NOT_SEND"
         status = "FAIL"
         detail = "Critical issues: " + "; ".join(reasons)
 
@@ -424,6 +484,8 @@ def compute_risk_score(checks: List[Dict[str, Any]]) -> Dict[str, Any]:
         "category": "summary",
         "score": risk,
         "label": label,
+        "risk_level": risk_level,
+        "campaign_decision": decision,
     }
 
 
@@ -619,19 +681,25 @@ def check_domain_reputation(domain: str) -> Dict[str, Any]:
 def _build_response(raw_email: str, normalized: str, checks: List[Dict[str, Any]], risk: Dict[str, Any], smtp_res: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Build the final response. Overall status is driven primarily by SMTP result."""
     score = risk.get("score", 0)
-    check_map = {c["name"]: c for c in checks}
-    smtp_check = check_map.get("SMTP Handshake & Mailbox Verification", {})
-    smtp_status = smtp_check.get("status", "SKIP")
-    smtp_detail = smtp_check.get("detail", "")
-    syntax_status = check_map.get("Syntax", {}).get("status", "PASS")
-    mx_status = check_map.get("MX Record", {}).get("status", "PASS")
+    risk_level = risk.get("risk_level", "HIGH" if score >= 70 else ("MEDIUM" if score >= 25 else "LOW"))
+    risk_label = risk.get("label", f"{risk_level.title()} Risk")
+    campaign_decision = risk.get("campaign_decision", "DO_NOT_SEND" if risk_level == "HIGH" else ("SEND_WITH_CAUTION" if risk_level == "MEDIUM" else "SAFE_TO_SEND"))
 
-    # Pull structured fields from the raw SMTP result dict
+    check_map = {c["name"]: c for c in checks}
+    syntax_check = check_map.get("Syntax", {})
+    syntax_status = syntax_check.get("status", "PASS")
+
     domain_check = check_map.get("Domain Existence", {})
     domain_valid = domain_check.get("status") == "PASS"
+
+    mx_check = check_map.get("MX Record", {})
+    mx_status = mx_check.get("status", "PASS")
     mx_valid = mx_status == "PASS"
 
-    # Catch-all comes from smtp_res metadata, NOT from the check detail string
+    smtp_check = check_map.get("SMTP Handshake & Mailbox Verification", {})
+    smtp_status = smtp_check.get("status", "SKIP")
+
+    # Pull structured fields from the raw SMTP result dict
     smtp_cls = smtp_res.get("Final classification", "UNKNOWN") if smtp_res else "UNKNOWN"
     catch_all = smtp_res.get("catch_all", False) if smtp_res else False
     catch_all_note = smtp_res.get("catch_all_note", "") if smtp_res else ""
@@ -643,48 +711,82 @@ def _build_response(raw_email: str, normalized: str, checks: List[Dict[str, Any]
                                        "SOURCE_IP_BIND_ERROR", "SMTP_BANNER_TIMEOUT") and smtp_status != "SKIP"
     mailbox_verified = smtp_cls in ("VALID", "ACCEPTED") and not catch_all
 
-    # Determine status — catch-all is now ONLY metadata; mailbox result is primary signal
-    if syntax_status == "FAIL" or mx_status == "FAIL":
+    # 1. Syntax failure (HARD GATE)
+    if syntax_status == "FAIL":
         status = "INVALID"
-        reason = "Failed preliminary checks (syntax, MX, or domain)."
+        reason = "Invalid email syntax"
+        score = 100
+        risk_level = "HIGH"
+        risk_label = "High Risk"
+        campaign_decision = "DO_NOT_SEND"
+    # 2. Domain or MX failure (HARD GATE)
+    elif domain_check.get("status") == "FAIL" or mx_status == "FAIL":
+        status = "INVALID"
+        reason = domain_check.get("detail") if domain_check.get("status") == "FAIL" else mx_check.get("detail", "MX record lookup failed")
+        score = 100
+        risk_level = "HIGH"
+        risk_label = "High Risk"
+        campaign_decision = "DO_NOT_SEND"
+    # 3. SMTP explicit rejection (550/553)
     elif smtp_status == "FAIL" or smtp_cls == "INVALID":
         status = "NOT_DELIVERABLE"
         reason = "SMTP server explicitly rejected this address. Mailbox does not exist."
+        score = 100
+        risk_level = "HIGH"
+        risk_label = "High Risk"
+        campaign_decision = "DO_NOT_SEND"
+    # 4. SMTP acceptance
     elif smtp_cls in ("VALID", "ACCEPTED"):
         if catch_all:
-            # Mailbox was accepted BUT domain is catch-all — cannot be 100% sure
             status = "DELIVERABLE"
             reason = "SMTP server accepted the recipient. Domain is catch-all; mailbox existence cannot be independently confirmed."
+            score = 35
+            risk_level = "MEDIUM"
+            risk_label = "Medium Risk"
+            campaign_decision = "SEND_WITH_CAUTION"
         else:
             status = "DELIVERABLE"
             reason = "SMTP server accepted the recipient. Mailbox confirmed."
+            score = 0
+            risk_level = "LOW"
+            risk_label = "Low Risk"
+            campaign_decision = "SAFE_TO_SEND"
     elif smtp_cls == "RISKY_CATCH_ALL":
         status = "RISKY"
         reason = "Domain is catch-all; SMTP accepted this address but also accepts any random address. Mailbox existence cannot be confirmed."
+        score = 60
+        risk_level = "MEDIUM"
+        risk_label = "Medium Risk"
+        campaign_decision = "SEND_WITH_CAUTION"
     elif smtp_status == "WARNING":
         status = "RISKY"
         reason = "Temporary SMTP failure, timeout, anti-enumeration, or network issue prevented reliable verification."
+        score = 50
+        risk_level = "MEDIUM"
+        risk_label = "Medium Risk"
+        campaign_decision = "SEND_WITH_CAUTION"
     else:
-        # SKIP (no SMTP check done) — fall back to risk score
-        if score >= 71:
+        if score >= 70:
             status = "NOT_DELIVERABLE"
             reason = "High risk score indicates undeliverable email."
-        elif score >= 35:
+            risk_level = "HIGH"
+            risk_label = "High Risk"
+            campaign_decision = "DO_NOT_SEND"
+        elif score >= 25:
             status = "RISKY"
             reason = "Moderate risk score without definitive SMTP verification."
+            risk_level = "MEDIUM"
+            risk_label = "Medium Risk"
+            campaign_decision = "SEND_WITH_CAUTION"
         else:
             status = "UNKNOWN"
             reason = "Could not perform SMTP verification."
+            score = 0
+            risk_level = "LOW"
+            risk_label = "Low Risk"
+            campaign_decision = "SAFE_TO_SEND"
 
-    # Determine confidence level
-    if status == "DELIVERABLE" and not catch_all:
-        confidence = "high"
-    elif status == "DELIVERABLE" and catch_all:
-        confidence = "medium"
-    elif status in ("RISKY", "UNKNOWN"):
-        confidence = "low"
-    else:
-        confidence = "high"  # NOT_DELIVERABLE from explicit 550 is high-confidence
+    confidence = "high" if (status == "DELIVERABLE" and not catch_all) or (status in ("INVALID", "NOT_DELIVERABLE") and score == 100) else ("medium" if catch_all else "low")
 
     return {
         "email": raw_email,
@@ -692,6 +794,10 @@ def _build_response(raw_email: str, normalized: str, checks: List[Dict[str, Any]
         "status": status,
         "overall_status": status,  # Kept for backward compatibility
         "reason": reason,
+        "risk_score": score,
+        "risk_level": risk_level,
+        "risk_label": risk_label,
+        "campaign_decision": campaign_decision,
         "domain_valid": domain_valid,
         "mx_valid": mx_valid,
         "mx_host": mx_host,
@@ -702,8 +808,6 @@ def _build_response(raw_email: str, normalized: str, checks: List[Dict[str, Any]
         "smtp_code": int(smtp_code_raw) if str(smtp_code_raw).isdigit() else None,
         "smtp_response": smtp_response_raw,
         "verification_confidence": confidence,
-        "risk_score": score,
-        "risk_label": risk.get("label", ""),
         "checks": checks,
     }
 

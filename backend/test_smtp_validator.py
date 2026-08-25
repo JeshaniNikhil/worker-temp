@@ -376,5 +376,25 @@ class TestCustomDomainAddresses(unittest.TestCase):
         self.assertEqual(res["Final classification"], "INVALID")
 
 
+class TestSyntaxHardGate(unittest.TestCase):
+    """Syntax validation hard gate test."""
+
+    def test_invalid_syntax_hard_gate(self):
+        from app.core.email_checker import check_email_detailed
+        res = check_email_detailed("nikhiljesh234==!!@@ani9@gmail.com")
+        self.assertEqual(res["status"], "INVALID")
+        self.assertEqual(res["risk_score"], 100)
+        self.assertEqual(res["risk_level"], "HIGH")
+        self.assertEqual(res["campaign_decision"], "DO_NOT_SEND")
+        self.assertEqual(res["reason"], "Invalid email syntax")
+        # Ensure DNS/MX/SMTP checks were skipped
+        check_map = {c["name"]: c["status"] for c in res["checks"]}
+        self.assertEqual(check_map["Syntax"], "FAIL")
+        self.assertEqual(check_map["Domain Existence"], "SKIP")
+        self.assertEqual(check_map["MX Record"], "SKIP")
+        self.assertEqual(check_map["SMTP Handshake & Mailbox Verification"], "SKIP")
+
+
 if __name__ == "__main__":
     unittest.main()
+
