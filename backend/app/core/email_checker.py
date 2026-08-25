@@ -496,7 +496,7 @@ def check_email_detailed(raw_email: str) -> Dict[str, Any]:
     checks.append(check_normalization(raw_email, normalized))
 
     # 12. Real SMTP Handshake & Mailbox Verification
-    validator = SMTPValidator(timeout=10.0)
+    validator = SMTPValidator(connect_timeout=10.0, banner_timeout=15.0, command_timeout=10.0)
     smtp_res = validator.check_email_smtp(normalized)
     smtp_cls = smtp_res.get("Final classification", "UNKNOWN")
     smtp_reason = smtp_res.get("Reason", "")
@@ -729,7 +729,7 @@ def _legacy_check_single(email: str) -> Tuple[str, str]:
     if domain in DISPOSABLE_DOMAINS:
         return "NOT DELIVERABLE", "Disposable email domain"
 
-    validator = SMTPValidator(timeout=10.0)
+    validator = SMTPValidator(connect_timeout=10.0, banner_timeout=15.0, command_timeout=10.0)
     res = validator.check_email_smtp(email)
     cls = res.get("Final classification", "UNKNOWN")
     reason = res.get("Reason", "")
