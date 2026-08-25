@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 # Locally: leave unset (empty string = OS picks interface)
 # ---------------------------------------------------------------------------
 SMTP_SOURCE_IP = os.environ.get("SMTP_SOURCE_IP", "").strip()
+SMTP_VERIFICATION_FROM = os.environ.get("SMTP_VERIFICATION_FROM", "verify@validator.wolfgroupindia.com").strip()
+SMTP_HELO_HOST = os.environ.get("SMTP_HELO_HOST", "validator.wolfgroupindia.com").strip()
 
 # ---------------------------------------------------------------------------
 # Reference lists
@@ -501,21 +503,31 @@ def check_email_detailed(raw_email: str) -> Dict[str, Any]:
     smtp_cls = smtp_res.get("Final classification", "UNKNOWN")
     smtp_reason = smtp_res.get("Reason", "")
     smtp_code = smtp_res.get("SMTP response code", "")
+    smtp_catch_all = smtp_res.get("catch_all", False)
+    smtp_catch_all_note = smtp_res.get("catch_all_note", "")
+    smtp_mx_host = smtp_res.get("Selected MX", "")
+    smtp_response_raw = smtp_res.get("RCPT TO response", "")
 
     if smtp_cls in ("VALID", "ACCEPTED"):
+        if smtp_catch_all:
+            checks.append(_make_check(
+                "SMTP Handshake & Mailbox Verification", "PASS",
+                f"✅ Mailbox accepted (Code {smtp_code}). ⚠️ Domain is catch-all: server accepts all addresses — mailbox existence cannot be independently confirmed.", "smtp"
+            ))
+        else:
+            checks.append(_make_check(
+                "SMTP Handshake & Mailbox Verification", "PASS",
+                f"✅ Mailbox exists and accepted RCPT TO (Code {smtp_code}). This email is deliverable.", "smtp"
+            ))
+    elif smtp_cls == "RISKY_CATCH_ALL":
         checks.append(_make_check(
-            "SMTP Handshake & Mailbox Verification", "PASS",
-            f"✅ Mailbox exists and accepted RCPT TO (Code {smtp_code}). This email is deliverable.", "smtp"
+            "SMTP Handshake & Mailbox Verification", "WARNING",
+            f"⚠️ Catch-All domain: server accepted this address but also accepts any random address. Mailbox existence cannot be verified. Treat as RISKY.", "smtp"
         ))
     elif smtp_cls == "INVALID":
         checks.append(_make_check(
             "SMTP Handshake & Mailbox Verification", "FAIL",
             f"❌ SMTP server explicitly rejected this address (Code {smtp_code}): {smtp_reason}. NOT DELIVERABLE.", "smtp"
-        ))
-    elif smtp_cls == "CATCH_ALL":
-        checks.append(_make_check(
-            "SMTP Handshake & Mailbox Verification", "WARNING",
-            f"⚠️ Catch-All domain detected: server accepts all addresses including random ones. Cannot verify specific mailbox. Treat as RISKY.", "smtp"
         ))
     elif smtp_cls == "TEMPORARY_FAILURE":
         checks.append(_make_check(
@@ -567,7 +579,7 @@ def check_email_detailed(raw_email: str) -> Dict[str, Any]:
     risk = compute_risk_score(checks)
     checks.append(risk)
 
-    return _build_response(raw_email, normalized, checks, risk)
+    return _build_response(raw_email, normalized, checks, risk, smtp_res)
 
 
 def check_domain_reputation(domain: str) -> Dict[str, Any]:
@@ -604,7 +616,7 @@ def check_domain_reputation(domain: str) -> Dict[str, Any]:
                            "Could not check domain reputation (RDAP unavailable).", "reputation")
 
 
-def _build_response(raw_email: str, normalized: str, checks: List[Dict[str, Any]], risk: Dict[str, Any]) -> Dict[str, Any]:
+def _build_response(raw_email: str, normalized: str, checks: List[Dict[str, Any]], risk: Dict[str, Any], smtp_res: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Build the final response. Overall status is driven primarily by SMTP result."""
     score = risk.get("score", 0)
     check_map = {c["name"]: c for c in checks}
@@ -614,66 +626,82 @@ def _build_response(raw_email: str, normalized: str, checks: List[Dict[str, Any]
     syntax_status = check_map.get("Syntax", {}).get("status", "PASS")
     mx_status = check_map.get("MX Record", {}).get("status", "PASS")
 
-    # Determine structured boolean fields
+    # Pull structured fields from the raw SMTP result dict
     domain_check = check_map.get("Domain Existence", {})
     domain_valid = domain_check.get("status") == "PASS"
-
     mx_valid = mx_status == "PASS"
-    
-    catch_all = "catch-all" in smtp_detail.lower() or "catch_all" in smtp_detail.lower()
-    
-    smtp_reachable = False
-    if smtp_status != "SKIP" and "Cannot reach mail server" not in smtp_detail and "SMTP Connection Error" not in smtp_detail and "TCP connection failed" not in smtp_detail and "Could not bind" not in smtp_detail:
-        smtp_reachable = True
-        
-    mailbox_verified = False
-    if smtp_status == "PASS" and not catch_all:
-        mailbox_verified = True
 
-    # Determine status
+    # Catch-all comes from smtp_res metadata, NOT from the check detail string
+    smtp_cls = smtp_res.get("Final classification", "UNKNOWN") if smtp_res else "UNKNOWN"
+    catch_all = smtp_res.get("catch_all", False) if smtp_res else False
+    catch_all_note = smtp_res.get("catch_all_note", "") if smtp_res else ""
+    mx_host = smtp_res.get("Selected MX", "") if smtp_res else ""
+    smtp_code_raw = smtp_res.get("SMTP response code", "") if smtp_res else ""
+    smtp_response_raw = smtp_res.get("RCPT TO response", "") if smtp_res else ""
+
+    smtp_reachable = smtp_cls not in ("DNS_ERROR", "NO_MX", "TCP_CONNECTION_FAILED", "CONNECTION_ERROR",
+                                       "SOURCE_IP_BIND_ERROR", "SMTP_BANNER_TIMEOUT") and smtp_status != "SKIP"
+    mailbox_verified = smtp_cls in ("VALID", "ACCEPTED") and not catch_all
+
+    # Determine status — catch-all is now ONLY metadata; mailbox result is primary signal
     if syntax_status == "FAIL" or mx_status == "FAIL":
         status = "INVALID"
         reason = "Failed preliminary checks (syntax, MX, or domain)."
-    elif smtp_status == "FAIL":
-        status = "INVALID"
+    elif smtp_status == "FAIL" or smtp_cls == "INVALID":
+        status = "NOT_DELIVERABLE"
         reason = "SMTP server explicitly rejected this address. Mailbox does not exist."
-    elif smtp_status == "PASS":
+    elif smtp_cls in ("VALID", "ACCEPTED"):
         if catch_all:
-            status = "RISKY"
-            reason = "Catch-all domain: server accepts arbitrary addresses, so the specific mailbox cannot be verified."
+            # Mailbox was accepted BUT domain is catch-all — cannot be 100% sure
+            status = "DELIVERABLE"
+            reason = "SMTP server accepted the recipient. Domain is catch-all; mailbox existence cannot be independently confirmed."
         else:
-            status = "VALID"
-            reason = "Mailbox exists and accepted verification."
+            status = "DELIVERABLE"
+            reason = "SMTP server accepted the recipient. Mailbox confirmed."
+    elif smtp_cls == "RISKY_CATCH_ALL":
+        status = "RISKY"
+        reason = "Domain is catch-all; SMTP accepted this address but also accepts any random address. Mailbox existence cannot be confirmed."
     elif smtp_status == "WARNING":
-        if catch_all:
-            status = "RISKY"
-            reason = "Catch-all domain: server accepts arbitrary addresses, so the specific mailbox cannot be verified."
-        else:
-            status = "UNKNOWN"
-            reason = "Temporary SMTP failure, timeout, or network issue prevented verification."
+        status = "RISKY"
+        reason = "Temporary SMTP failure, timeout, anti-enumeration, or network issue prevented reliable verification."
     else:
-        # SKIP (no SMTP check done)
+        # SKIP (no SMTP check done) — fall back to risk score
         if score >= 71:
-            status = "INVALID"
+            status = "NOT_DELIVERABLE"
             reason = "High risk score indicates undeliverable email."
         elif score >= 35:
             status = "RISKY"
             reason = "Moderate risk score without definitive SMTP verification."
         else:
-            status = "VALID"
-            reason = "Low risk score, assuming valid without SMTP."
+            status = "UNKNOWN"
+            reason = "Could not perform SMTP verification."
+
+    # Determine confidence level
+    if status == "DELIVERABLE" and not catch_all:
+        confidence = "high"
+    elif status == "DELIVERABLE" and catch_all:
+        confidence = "medium"
+    elif status in ("RISKY", "UNKNOWN"):
+        confidence = "low"
+    else:
+        confidence = "high"  # NOT_DELIVERABLE from explicit 550 is high-confidence
 
     return {
         "email": raw_email,
         "normalized_email": normalized,
         "status": status,
         "overall_status": status,  # Kept for backward compatibility
+        "reason": reason,
         "domain_valid": domain_valid,
         "mx_valid": mx_valid,
+        "mx_host": mx_host,
         "smtp_reachable": smtp_reachable,
         "mailbox_verified": mailbox_verified,
         "catch_all": catch_all,
-        "reason": reason,
+        "catch_all_note": catch_all_note,
+        "smtp_code": int(smtp_code_raw) if str(smtp_code_raw).isdigit() else None,
+        "smtp_response": smtp_response_raw,
+        "verification_confidence": confidence,
         "risk_score": score,
         "risk_label": risk.get("label", ""),
         "checks": checks,
@@ -766,13 +794,13 @@ def _legacy_check_single(email: str) -> Tuple[str, str]:
     code = res.get("SMTP response code", "")
 
     if cls in ("VALID", "ACCEPTED"):
-        return "VALID", f"SMTP RCPT TO accepted (Code {code}). Mailbox confirmed."
-    elif cls == "CATCH_ALL":
-        return "RISKY", "Catch-All domain: server accepts all addresses. Specific mailbox unverifiable."
+        return "DELIVERABLE", f"SMTP RCPT TO accepted (Code {code}). Mailbox confirmed."
+    elif cls == "RISKY_CATCH_ALL":
+        return "RISKY", "Domain is catch-all; SMTP accepted the recipient but mailbox existence cannot be confirmed."
     elif cls in ("INVALID", "INVALID_SYNTAX", "NO_MX", "DNS_ERROR"):
-        return "INVALID", f"SMTP rejected (Code {code}): {reason}"
+        return "NOT_DELIVERABLE", f"SMTP rejected (Code {code}): {reason}"
     elif cls == "TEMPORARY_FAILURE":
-        return "UNKNOWN", f"Temporary SMTP failure (greylisting/rate-limit): {reason}"
+        return "RISKY", f"Temporary SMTP failure (greylisting/rate-limit): {reason}"
     elif cls in ("TIMEOUT", "CONNECTION_ERROR", "TCP_CONNECTION_FAILED", "SMTP_BANNER_TIMEOUT", "SMTP_TIMEOUT_AFTER_CONNECTION", "SOURCE_IP_BIND_ERROR"):
         return "UNKNOWN", f"Cannot verify mail server ({cls}). Deploy to VPS or check network."
     else:
@@ -843,15 +871,14 @@ class CustomSMTP(smtplib.SMTP):
         return res
 
 class SMTPValidator:
-    def __init__(self, connect_timeout=15.0, banner_timeout=20.0, command_timeout=15.0, sender="validator@example.com", helo_host="validator.wolfgroupindia.com"):
+    def __init__(self, connect_timeout=10.0, banner_timeout=15.0, command_timeout=10.0,
+                 sender: str = None, helo_host: str = None):
         self.connect_timeout = connect_timeout
         self.banner_timeout = banner_timeout
         self.command_timeout = command_timeout
-        self.sender = sender
-        self.helo_host = helo_host
-
-
-
+        # Use env vars as defaults; callers can still override via constructor
+        self.sender = sender or SMTP_VERIFICATION_FROM
+        self.helo_host = helo_host or SMTP_HELO_HOST
 
     def check_email_smtp(self, email: str) -> Dict[str, Any]:
         """
@@ -934,29 +961,71 @@ class SMTPValidator:
             return result
 
         # 3. SMTP checking over MX records
+        last_connection_err = None
         for pref, mx in mx_list:
             result["Selected MX"] = mx
             result["MX priority"] = pref
-            
+
             smtp_res = self._probe_mx(mx, email, result, start_time)
             result.update(smtp_res)
-            
-            # If we get a definitive connection error or timeout, we might try next MX
-            if smtp_res["Final classification"] in ("CONNECTION_ERROR", "TIMEOUT", "SMTP_ERROR"):
-                # Try next MX if available
+
+            final_cls = smtp_res.get("Final classification", "UNKNOWN")
+
+            # Definitive connection failure → try next MX
+            if final_cls in ("TCP_CONNECTION_FAILED", "CONNECTION_ERROR", "SMTP_BANNER_TIMEOUT",
+                             "SMTP_TIMEOUT_AFTER_CONNECTION", "SOURCE_IP_BIND_ERROR"):
+                last_connection_err = smtp_res
+                logger.warning(f"[SMTP] MX {mx} failed with {final_cls}, trying next MX if available")
                 continue
-            
-            # If we got a definitive answer (VALID, INVALID, TEMPORARY_FAILURE, etc.), stop checking MXs
+
+            # Got a definitive answer (VALID, INVALID, TEMPORARY_FAILURE, etc.) — stop
             break
-            
-        # Catch-all check if the email was accepted
-        if result["Final classification"] in ("VALID", "ACCEPTED"):
-            random_email = f"random-validation-{generate_random_string()}@{domain}"
+
+        # Catch-all detection: ONLY run if mailbox itself was positively accepted (VALID/ACCEPTED)
+        # The catch-all probe result is stored as metadata, NOT used to downgrade the mailbox result
+        result["catch_all"] = False
+        result["catch_all_note"] = ""
+        if result.get("Final classification") in ("VALID", "ACCEPTED"):
+            import uuid
+            random_local = f"catchall-probe-{uuid.uuid4().hex[:12]}"
+            random_email = f"{random_local}@{domain}"
+            logger.info(f"[CATCH-ALL] Testing random address: {random_email}")
+            catch_all_res = self._probe_mx(result["Selected MX"], random_email, {}, start_time, is_catch_all_probe=True)
+            random_cls = catch_all_res.get("Final classification", "UNKNOWN")
+            logger.info(f"[CATCH-ALL] Random probe result: {random_cls}")
+            if random_cls in ("VALID", "ACCEPTED"):
+                # Domain is catch-all. The REQUESTED mailbox stays VALID since it was explicitly accepted.
+                # We annotate with catch_all=True so callers can adjust confidence level.
+                result["catch_all"] = True
+                result["catch_all_note"] = (
+                    "Domain accepts arbitrary recipients; mailbox existence cannot be independently confirmed."
+                )
+                logger.info(f"[CATCH-ALL] Domain {domain} is catch-all. Requested mailbox stays VALID; catch_all=True annotated.")
+            else:
+                result["catch_all"] = False
+                logger.info(f"[CATCH-ALL] Domain {domain} is NOT catch-all (random probe returned {random_cls}).")
+        elif result.get("Final classification") not in ("VALID", "ACCEPTED") and result.get("Final classification") not in (
+            "INVALID", "INVALID_SYNTAX", "DNS_ERROR", "NO_MX"
+        ):
+            # For ambiguous / non-rejected cases, also try catch-all probe
+            # If random is accepted on an ambiguous domain, mark as RISKY_CATCH_ALL
+            import uuid
+            random_local = f"catchall-probe-{uuid.uuid4().hex[:12]}"
+            random_email = f"{random_local}@{domain}"
             catch_all_res = self._probe_mx(result["Selected MX"], random_email, {}, start_time, is_catch_all_probe=True)
             if catch_all_res.get("Final classification") in ("VALID", "ACCEPTED"):
-                result["Final classification"] = "CATCH_ALL"
-                result["Reason"] = "Domain accepts emails to random non-existent addresses (Catch-All)"
-                
+                result["catch_all"] = True
+                result["catch_all_note"] = "Domain accepts arbitrary recipients; verification is unreliable."
+
+        # Log final result
+        elapsed = round(time.time() - start_time, 3)
+        logger.info(
+            f"[RESULT] email={email} domain={domain} mx={result.get('Selected MX', '')} "
+            f"src_ip={SMTP_SOURCE_IP or 'auto'} helo={self.helo_host} sender={self.sender} "
+            f"smtp_code={result.get('SMTP response code', '')} "
+            f"final={result.get('Final classification', 'UNKNOWN')} "
+            f"catch_all={result.get('catch_all', False)} elapsed={elapsed}s"
+        )
         return result
 
     def _probe_mx(self, mx: str, email: str, result: dict, start_time: float, is_catch_all_probe: bool = False) -> dict:
