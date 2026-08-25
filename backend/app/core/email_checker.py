@@ -512,7 +512,8 @@ def check_email_detailed(raw_email: str) -> Dict[str, Any]:
         skip_msg = "Skipped — syntax error prevents further checks."
         for name in ["Domain Existence", "MX Record", "A Record", "Disposable Domain",
                      "Free Email Provider", "Role Account", "Typo Detection",
-                     "Domain Age/Reputation", "DNS Health", "Email Normalization"]:
+                     "Domain Age/Reputation", "DNS Health", "Email Normalization",
+                     "SMTP Handshake & Mailbox Verification"]:
             checks.append(_make_check(name, "SKIP", skip_msg))
         risk = compute_risk_score(checks)
         checks.append(risk)
