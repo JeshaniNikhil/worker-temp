@@ -1,6 +1,5 @@
-version: '3.8'
-
 services:
+
   db:
     image: postgres:15
     environment:
@@ -8,60 +7,98 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: emailplatform
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
 
   redis:
     image: redis:7
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6381:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
 
   api2:
     build:
       context: ./backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8003
+    ports:
+      - "127.0.0.1:8003:8003"
+    networks:
+      - default
+      - mailcow-network
     volumes:
       - ./backend:/app
-    ports:
-      - "8002:8000"
     environment:
-      - DATABASE_URL=postgresql://user:password@db:5432/emailplatform
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      DATABASE_URL: postgresql://user:password@db:5432/emailplatform
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+
+      SMTP_SOURCE_IP:
+      SMTP_VERIFICATION_FROM: verify@validator.wolfgroupindia.com
+      SMTP_HELO_HOST: validator.wolfgroupindia.com
+      HELO_HOST: validator.wolfgroupindia.com
+
     depends_on:
       - db
       - redis
+    restart: unless-stopped
 
   worker:
     build:
       context: ./backend
-    command: celery -A app.worker.celery_app worker --loglevel=info
+    # concurrency=1 is REQUIRED — prevents simultaneous SMTP connections
+    # that would trigger IP bans from Gmail/Yahoo/Microsoft on Contabo
+    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=1 -n worker@%h
+    networks:
+      - default
     volumes:
       - ./backend:/app
     environment:
-      - DATABASE_URL=postgresql://user:password@db:5432/emailplatform
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      DATABASE_URL: postgresql://user:password@db:5432/emailplatform
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+
+      SMTP_SOURCE_IP: 169.58.234.98
+      SMTP_VERIFICATION_FROM: verify@validator.wolfgroupindia.com
+      SMTP_HELO_HOST: validator.wolfgroupindia.com
+      HELO_HOST: validator.wolfgroupindia.com
+
+      # Rate limiting — seconds between each SMTP check (safe for Contabo)
+      # 100 emails ≈ 4 mins | 500 emails ≈ 20 mins | 1000 emails ≈ 40 mins
+      SMTP_DELAY_MIN: "1.2"
+      SMTP_DELAY_MAX: "2.8"
+
     depends_on:
       - db
       - redis
-      - api2
+    restart: unless-stopped
 
   frontend:
     build:
       context: ./frontend
-    command: npm run dev -- --host
+    command: npm run dev -- --host 0.0.0.0
+    ports:
+      - "8081:5173"
+    networks:
+      - default
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    ports:
-      - "8081:5173"
-    environment:
-      - VITE_API_TARGET=http://api2:8000
-    depends_on:
-      - api2
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: email-validator_default
+
+  mailcow-network:
+    external: true
+    name: mailcowdockerized_mailcow-network

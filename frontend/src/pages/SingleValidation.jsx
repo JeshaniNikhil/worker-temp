@@ -20,13 +20,15 @@ const STATUS_CONFIG = {
 
 // ─── Overall verdict config ───────────────────────────────────────────────────
 const OVERALL_CONFIG = {
-  'VALID':   { color: '#10b981', glow: 'rgba(16,185,129,0.3)',  label: '🟢 VALID',   subLabel: 'Safe to send — mailbox confirmed', icon: ShieldCheck },
-  'INVALID': { color: '#ef4444', glow: 'rgba(239,68,68,0.3)',   label: '🔴 INVALID', subLabel: 'Do not send — mailbox rejected or invalid', icon: ShieldX },
-  'RISKY':   { color: '#f59e0b', glow: 'rgba(245,158,11,0.3)',  label: '🟠 RISKY',   subLabel: 'Catch-All or unverifiable — send with caution', icon: ShieldAlert },
-  'UNKNOWN': { color: '#94a3b8', glow: 'rgba(148,163,184,0.3)', label: '⚪ UNKNOWN', subLabel: 'Cannot determine — port blocked or timeout', icon: Shield },
-  
+  'DELIVERABLE': { color: '#10b981', glow: 'rgba(16,185,129,0.3)',  label: '🟢 DELIVERABLE',   subLabel: 'Safe to send — SMTP confirmed mailbox exists', icon: ShieldCheck },
+  'INVALID':     { color: '#ef4444', glow: 'rgba(239,68,68,0.3)',   label: '🔴 INVALID',     subLabel: 'Do not send — mailbox rejected or domain invalid', icon: ShieldX },
+  'NOT_DELIVERABLE': { color: '#ef4444', glow: 'rgba(239,68,68,0.3)', label: '🔴 NOT DELIVERABLE', subLabel: 'Do not send — SMTP explicitly rejected this address', icon: ShieldX },
+  'CATCH_ALL':   { color: '#f59e0b', glow: 'rgba(245,158,11,0.3)',  label: '⚠️ CATCH-ALL',    subLabel: 'Domain is valid but catch-all — cannot verify specific mailbox. Send with caution.', icon: ShieldAlert },
+  'RISKY':       { color: '#f97316', glow: 'rgba(249,115,22,0.3)',  label: '🟠 RISKY',       subLabel: 'SMTP verification inconclusive — temporary failure, timeout or anti-enumeration', icon: ShieldAlert },
+  'UNKNOWN':     { color: '#94a3b8', glow: 'rgba(148,163,184,0.3)', label: '⚪ UNKNOWN',     subLabel: 'Could not verify — SMTP timed out or port 25 blocked on this network', icon: Shield },
+
   // Fallbacks for older backend responses
-  'DELIVERABLE':     { color: '#10b981', glow: 'rgba(16,185,129,0.3)',  label: '🟢 VALID',   subLabel: 'Safe to send — mailbox confirmed', icon: ShieldCheck },
+  'VALID':           { color: '#10b981', glow: 'rgba(16,185,129,0.3)',  label: '🟢 VALID',   subLabel: 'Safe to send — mailbox confirmed', icon: ShieldCheck },
   'NOT DELIVERABLE': { color: '#ef4444', glow: 'rgba(239,68,68,0.3)',   label: '🔴 INVALID', subLabel: 'Do not send — mailbox rejected or invalid', icon: ShieldX },
 };
 
@@ -171,10 +173,17 @@ const SingleValidation = () => {
     }
   };
 
-  const overall = result ? (OVERALL_CONFIG[result.status] || OVERALL_CONFIG[result.overall_status] || OVERALL_CONFIG['UNKNOWN']) : null;
+  const overall = result
+    ? (
+        OVERALL_CONFIG[result.status] ||
+        OVERALL_CONFIG[result.overall_status] ||
+        OVERALL_CONFIG['UNKNOWN']
+      )
+    : null;
+
   let dynamicSubLabel = overall?.subLabel;
-  if (result?.catch_all) {
-    dynamicSubLabel = 'Catch-all domain detected. The mail server accepts arbitrary addresses, so this specific mailbox cannot be reliably verified.';
+  if (result?.catch_all && result?.status !== 'CATCH_ALL') {
+    dynamicSubLabel = 'Catch-all domain detected — the mail server accepts any address on this domain. This specific mailbox cannot be reliably verified.';
   }
   // Separate risk scoring from display checks
   const displayChecks = result ? result.checks.filter(c => c.name !== 'Risk Scoring') : [];
@@ -488,7 +497,7 @@ const SingleValidation = () => {
         {/* Header */}
         <div className="sv-header">
           <h1>Email Deep Validator</h1>
-          <p>12-point analysis — Syntax · DNS · Reputation · Risk Score — No Port 25 required</p>
+          <p>12-point analysis — Syntax · DNS · RDAP · SMTP Mailbox · Risk Score</p>
         </div>
 
         {/* Search Card */}

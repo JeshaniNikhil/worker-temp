@@ -600,7 +600,7 @@ def check_email_detailed(raw_email: str) -> Dict[str, Any]:
     elif smtp_cls == "TIMEOUT":
         checks.append(_make_check(
             "SMTP Handshake & Mailbox Verification", "WARNING",
-            f"🕐 SMTP connection timed out. Port 25 may be blocked (ISP/firewall). Deploy to Contabo VPS for accurate results.", "smtp"
+            f"🕐 SMTP connection timed out. The mail server did not respond in time — may be rate-limiting or temporarily unavailable. Result: RISKY.", "smtp"
         ))
     elif smtp_cls in ("DNS_ERROR", "NO_MX"):
         checks.append(_make_check(
@@ -739,25 +739,26 @@ def _build_response(raw_email: str, normalized: str, checks: List[Dict[str, Any]
     # 4. SMTP acceptance
     elif smtp_cls in ("VALID", "ACCEPTED"):
         if catch_all:
-            status = "DELIVERABLE"
-            reason = "SMTP server accepted the recipient. Domain is catch-all; mailbox existence cannot be independently confirmed."
-            score = 35
+            # Domain is catch-all — domain is valid but specific mailbox CANNOT be confirmed
+            status = "CATCH_ALL"
+            reason = "Domain is valid and SMTP server accepted the address, but domain uses catch-all — it accepts ALL email addresses regardless of whether the mailbox exists. Delivery is uncertain."
+            score = 40
             risk_level = "MEDIUM"
-            risk_label = "Medium Risk"
+            risk_label = "Medium Risk — Catch-All"
             campaign_decision = "SEND_WITH_CAUTION"
         else:
             status = "DELIVERABLE"
-            reason = "SMTP server accepted the recipient. Mailbox confirmed."
+            reason = "SMTP server explicitly accepted the recipient. Mailbox confirmed deliverable."
             score = 0
             risk_level = "LOW"
             risk_label = "Low Risk"
             campaign_decision = "SAFE_TO_SEND"
     elif smtp_cls == "RISKY_CATCH_ALL":
-        status = "RISKY"
-        reason = "Domain is catch-all; SMTP accepted this address but also accepts any random address. Mailbox existence cannot be confirmed."
-        score = 60
+        status = "CATCH_ALL"
+        reason = "Domain uses catch-all configuration — SMTP accepts any address on this domain regardless of mailbox existence. Cannot confirm this specific mailbox."
+        score = 50
         risk_level = "MEDIUM"
-        risk_label = "Medium Risk"
+        risk_label = "Medium Risk — Catch-All"
         campaign_decision = "SEND_WITH_CAUTION"
     elif smtp_status == "WARNING":
         status = "RISKY"
@@ -781,11 +782,11 @@ def _build_response(raw_email: str, normalized: str, checks: List[Dict[str, Any]
             campaign_decision = "SEND_WITH_CAUTION"
         else:
             status = "UNKNOWN"
-            reason = "Could not perform SMTP verification."
-            score = 0
-            risk_level = "LOW"
-            risk_label = "Low Risk"
-            campaign_decision = "SAFE_TO_SEND"
+            reason = "Could not perform SMTP verification — port 25 may be blocked or server unresponsive."
+            score = 30
+            risk_level = "MEDIUM"
+            risk_label = "Medium Risk"
+            campaign_decision = "SEND_WITH_CAUTION"
 
     confidence = "high" if (status == "DELIVERABLE" and not catch_all) or (status in ("INVALID", "NOT_DELIVERABLE") and score == 100) else ("medium" if catch_all else "low")
 
@@ -899,15 +900,18 @@ def _legacy_check_single(email: str) -> Tuple[str, str]:
     code = res.get("SMTP response code", "")
 
     if cls in ("VALID", "ACCEPTED"):
-        return "DELIVERABLE", f"SMTP RCPT TO accepted (Code {code}). Mailbox confirmed."
+        catch_all = res.get("catch_all", False)
+        if catch_all:
+            return "CATCH_ALL", "Domain is catch-all — accepts all addresses regardless of mailbox existence. Cannot confirm this specific mailbox."
+        return "DELIVERABLE", f"SMTP RCPT TO accepted (Code {code}). Mailbox confirmed deliverable."
     elif cls == "RISKY_CATCH_ALL":
-        return "RISKY", "Domain is catch-all; SMTP accepted the recipient but mailbox existence cannot be confirmed."
+        return "CATCH_ALL", "Domain uses catch-all configuration — cannot confirm specific mailbox existence."
     elif cls in ("INVALID", "INVALID_SYNTAX", "NO_MX", "DNS_ERROR"):
-        return "NOT_DELIVERABLE", f"SMTP rejected (Code {code}): {reason}"
+        return "NOT DELIVERABLE", f"SMTP rejected (Code {code}): {reason}"
     elif cls == "TEMPORARY_FAILURE":
         return "RISKY", f"Temporary SMTP failure (greylisting/rate-limit): {reason}"
     elif cls in ("TIMEOUT", "CONNECTION_ERROR", "TCP_CONNECTION_FAILED", "SMTP_BANNER_TIMEOUT", "SMTP_TIMEOUT_AFTER_CONNECTION", "SOURCE_IP_BIND_ERROR"):
-        return "UNKNOWN", f"Cannot verify mail server ({cls}). Deploy to VPS or check network."
+        return "UNKNOWN", f"SMTP check inconclusive — server timed out or connection failed ({cls})."
     else:
         return "UNKNOWN", f"Inconclusive SMTP result ({cls}): {reason}"
 
