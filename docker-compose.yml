@@ -89,6 +89,8 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    environment:
+      - VITE_API_TARGET=http://api2:8003
     restart: unless-stopped
 
 volumes:
