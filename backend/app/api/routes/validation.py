@@ -63,44 +63,51 @@ async def upload_csv(
     Creates a job record immediately and dispatches it to Celery + Redis.
     Returns the job object immediately so the UI can start polling for live results.
     """
-    if not req.filename.lower().endswith('.csv'):
-        raise HTTPException(status_code=400, detail="Only CSV files are allowed")
+    try:
+        if not req.filename.lower().endswith('.csv'):
+            raise HTTPException(status_code=400, detail="Only CSV files are allowed")
 
-    content_str = req.content
-    email_column = req.email_column
+        content_str = req.content
+        email_column = req.email_column
 
-    # Validate CSV structure and column
-    f = io.StringIO(content_str)
-    reader = csv.DictReader(f)
+        # Validate CSV structure and column
+        f = io.StringIO(content_str)
+        reader = csv.DictReader(f)
 
-    if reader.fieldnames is None:
-        raise HTTPException(status_code=400, detail="The uploaded CSV file is empty or invalid.")
+        if reader.fieldnames is None:
+            raise HTTPException(status_code=400, detail="The uploaded CSV file is empty or invalid.")
 
-    if email_column not in reader.fieldnames:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Column '{email_column}' not found in CSV. "
-                f"Available columns: {list(reader.fieldnames)}"
+        if email_column not in reader.fieldnames:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Column '{email_column}' not found in CSV. "
+                    f"Available columns: {list(reader.fieldnames)}"
+                )
             )
+
+        total_records = sum(1 for _ in reader)
+
+        # Create job record in DB
+        job = ValidationJob(
+            filename=req.filename,
+            total_records=total_records,
+            status="PENDING"
         )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
 
-    total_records = sum(1 for _ in reader)
+        # Dispatch to Celery worker via Redis broker
+        process_csv_validation.delay(job.id, content_str, email_column)
 
-    # Create job record in DB
-    job = ValidationJob(
-        filename=req.filename,
-        total_records=total_records,
-        status="PENDING"
-    )
-    db.add(job)
-    db.commit()
-    db.refresh(job)
-
-    # Dispatch to Celery worker via Redis broker
-    process_csv_validation.delay(job.id, content_str, email_column)
-
-    return job
+        return job
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_msg = f"Internal Error: {str(e)}\n{traceback.format_exc()}"
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @router.get("/jobs", response_model=List[ValidationJobResponse])
