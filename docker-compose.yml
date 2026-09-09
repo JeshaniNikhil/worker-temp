@@ -33,9 +33,9 @@ services:
       - ./backend:/app
     environment:
       DATABASE_URL: postgresql://user:password@db:5432/emailplatform
-      REDIS_URL: redis://email-validator-redis-1:6379/0
-      CELERY_BROKER_URL: redis://email-validator-redis-1:6379/0
-      CELERY_RESULT_BACKEND: redis://email-validator-redis-1:6379/0
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
 
       SMTP_SOURCE_IP: 169.58.234.98
       SMTP_VERIFICATION_FROM: verify@validator.wolfgroupindia.com
