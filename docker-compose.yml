@@ -33,11 +33,11 @@ services:
       - ./backend:/app
     environment:
       DATABASE_URL: postgresql://user:password@db:5432/emailplatform
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      REDIS_URL: redis://email-validator-redis-1:6379/0
+      CELERY_BROKER_URL: redis://email-validator-redis-1:6379/0
+      CELERY_RESULT_BACKEND: redis://email-validator-redis-1:6379/0
 
-      SMTP_SOURCE_IP:
+      SMTP_SOURCE_IP: 169.58.234.98
       SMTP_VERIFICATION_FROM: verify@validator.wolfgroupindia.com
       SMTP_HELO_HOST: validator.wolfgroupindia.com
       HELO_HOST: validator.wolfgroupindia.com
@@ -59,9 +59,9 @@ services:
       - ./backend:/app
     environment:
       DATABASE_URL: postgresql://user:password@db:5432/emailplatform
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      REDIS_URL: redis://email-validator-redis-1:6379/0
+      CELERY_BROKER_URL: redis://email-validator-redis-1:6379/0
+      CELERY_RESULT_BACKEND: redis://email-validator-redis-1:6379/0
 
       SMTP_SOURCE_IP: 169.58.234.98
       SMTP_VERIFICATION_FROM: verify@validator.wolfgroupindia.com
@@ -70,8 +70,8 @@ services:
 
       # Rate limiting — seconds between each SMTP check (safe for Contabo)
       # 100 emails ≈ 4 mins | 500 emails ≈ 20 mins | 1000 emails ≈ 40 mins
-      SMTP_DELAY_MIN: "1.2"
-      SMTP_DELAY_MAX: "2.8"
+      SMTP_DELAY_MIN: "5.0"
+      SMTP_DELAY_MAX: "7.0"
 
     depends_on:
       - db

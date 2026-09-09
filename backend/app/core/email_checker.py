@@ -957,6 +957,10 @@ class CustomSMTP(smtplib.SMTP):
                         raise
                 sock.connect(sa)
                 self.dest_ip = sa[0]
+                try:
+                    self.source_ip = sock.getsockname()[0]
+                except Exception:
+                    self.source_ip = self.source_address[0] if self.source_address else None
                 self.tcp_connected = True
                 
                 # Switch to banner timeout for the getreply() call in connect()
