@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  socks5:
+    image: serjs/socks5
+    container_name: volknode-smtp-socks5
+    restart: always
+    ports:
+      - "1080:1080"
+    environment:
+      - USER=${PROXY_USER:-smtpuser}
+      - PASS=${PROXY_PASS:-change_me_proxy_password}

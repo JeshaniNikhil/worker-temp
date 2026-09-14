@@ -1,0 +1,56 @@
+Name,Email,Facebook,Instagram,LinkedIn,WhatsApp
+Mark Zuckerberg,mark.zuckerberg@meta.com,zuck,@zuck,https://www.linkedin.com/in/williamhgates,+14155552671
+Bill Gates,bill.gates@gatesfoundation.org,billgates,@billgates,williamhgates,+12025550143
+Satya Nadella,satya.nadella@microsoft.com,satyanadella,@satyanadella,satyanadella,+14258828080
+Sundar Pichai,sundar.pichai@google.com,sundarpichai,@sundarpichai,sundarpichai,+16502530000
+Elon Musk,elon.musk@tesla.com,elonmusk,@elonmusk,elonmusk,+13103636000
+Tim Cook,tim.cook@apple.com,timcook,@timcook,timcook,+14089961010
+Jeff Bezos,jeff.bezos@amazon.com,jeffbezos,@jeffbezos,jeffbezos,+12062661000
+Cristiano Ronaldo,ronaldo@cristianoronaldo.com,cristiano,@cristiano,cristiano,+351210000000
+National Geographic,info@natgeo.com,natgeo,@natgeo,national-geographic,+12028577000
+Nike Official,support@nike.com,nike,@nike,nike,+15036716453
+Apple Inc,contact@apple.com,apple,@apple,apple,+14089961010
+Google Official,press@google.com,google,@google,google,+16502530000
+Microsoft Corp,info@microsoft.com,microsoft,@microsoft,microsoft,+14258828080
+BBC News,yourquestions@bbc.co.uk,bbcnews,@bbcnews,bbc,+442080081500
+CNN News,contacts@cnn.com,cnn,@cnn,cnn,+14048271700
+TechCrunch,feedback@techcrunch.com,techcrunch,@techcrunch,techcrunch,+14155550199
+Wired Magazine,letters@wired.com,wired,@wired,wired,+14152765000
+MIT University,admissions@mit.edu,mitnews,@mit,mit,+16172531000
+Stanford University,info@stanford.edu,stanford,@stanford,stanford-university,+16507232300
+Harvard University,help@harvard.edu,harvard,@harvard,harvard-university,+16174951000
+John Doe Fake,nonexistent_email_test_998877@gmail.com,fake_fb_user_xyz998877,@fake_ig_user_xyz998877,fake-linkedin-profile-xyz998877,+10000000000
+Jane Smith Fake,invalid_user_account_123456789@yahoo.com,fake_user_123456789_notfound,@fake_user_123456789_notfound,non-existent-profile-xyz-987654321,+910000000000
+Bad Email Format,invalid..email..format@@test,fake_facebook_user_not_exist_112233,@fake_insta_handle_998877,fake-li-user-112233,12345
+Disposable Mail,test_user_temp@mailinator.com,fb_not_real_user_776655,@ig_not_real_user_776655,li-not-real-user-776655,+440000000000
+Invalid Domain,user@nonexistentdomain1234567890xyz.com,this_user_definitely_does_not_exist_987654,@this_user_definitely_does_not_exist_987654,this-user-definitely-does-not-exist-987654,+19999999999
+Empty Handle Row,test1@gmail.com,,,,+14155552671
+Fake Social Active Mail,contact@stripe.com,fake_fb_stripe_not_real_99,@fake_ig_stripe_not_real_99,fake-li-stripe-not-real-99,+18889638942
+Active FB Fake Email,broken_mail_address_987654@nonexistentdomainxyz.org,zuck,@fake_instagram_account_xyz_998877,fake-linkedin-profile-xyz998877,+14155552671
+Active IG Fake Email,broken_mail_address_987654@nonexistentdomainxyz.org,fake_fb_user_xyz998877,@instagram,fake-linkedin-profile-xyz998877,+14155552671
+Active LI Fake Email,broken_mail_address_987654@nonexistentdomainxyz.org,fake_fb_user_xyz998877,@fake_instagram_account_xyz_998877,satyanadella,+14155552671
+Active WA Fake Email,broken_mail_address_987654@nonexistentdomainxyz.org,fake_fb_user_xyz998877,@fake_instagram_account_xyz_998877,fake-linkedin-profile-xyz998877,+14155552671
+Valid Corporate 1,support@github.com,github,@github,github,+18889638942
+Valid Corporate 2,hello@figma.com,figma,@figma,figma,+18889638942
+Valid Corporate 3,info@slack.com,slack,@slack,slack-hq,+14155550199
+Valid Corporate 4,support@notion.so,notionhq,@notionhq,notionhq,+14155550199
+Valid Corporate 5,hello@linear.app,linearapp,@linearapp,linearapp,+14155550199
+Valid Corporate 6,info@canva.com,canva,@canva,canva,+61285800000
+Valid Corporate 7,support@atlassian.com,atlassian,@atlassian,atlassian,+61292999582
+Valid Corporate 8,info@hubspot.com,hubspot,@hubspot,hubspot,+18884827768
+Valid Corporate 9,support@salesforce.com,salesforce,@salesforce,salesforce,+18006676389
+Valid Corporate 10,contact@zoom.us,zoom,@zoom,zoom,+18887999666
+Fake User 1,fake_person_01@domaindoesnotexist99.com,fake_fb_01,@fake_ig_01,fake-li-01,+10000000001
+Fake User 2,fake_person_02@domaindoesnotexist99.com,fake_fb_02,@fake_ig_02,fake-li-02,+10000000002
+Fake User 3,fake_person_03@domaindoesnotexist99.com,fake_fb_03,@fake_ig_03,fake-li-03,+10000000003
+Fake User 4,fake_person_04@domaindoesnotexist99.com,fake_fb_04,@fake_ig_04,fake-li-04,+10000000004
+Fake User 5,fake_person_05@domaindoesnotexist99.com,fake_fb_05,@fake_ig_05,fake-li-05,+10000000005
+Fake User 6,fake_person_06@domaindoesnotexist99.com,fake_fb_06,@fake_ig_06,fake-li-06,+10000000006
+Fake User 7,fake_person_07@domaindoesnotexist99.com,fake_fb_07,@fake_ig_07,fake-li-07,+10000000007
+Fake User 8,fake_person_08@domaindoesnotexist99.com,fake_fb_08,@fake_ig_08,fake-li-08,+10000000008
+Fake User 9,fake_person_09@domaindoesnotexist99.com,fake_fb_09,@fake_ig_09,fake-li-09,+10000000009
+Fake User 10,fake_person_10@domaindoesnotexist99.com,fake_fb_10,@fake_ig_10,fake-li-10,+10000000010
+Mixed Valid Email Fake Social,support@docker.com,fake_fb_docker_999,@fake_ig_docker_999,fake-li-docker-999,+10000000011
+Mixed Fake Email Valid Social,nonexistent_user_998877@yahoo.com,zuck,@instagram,satyanadella,+14155552671
+Mixed WhatsApp Only,broken_mail_999@domainxyz999.com,fake_fb_999,@fake_ig_999,fake-li-999,+14155552671
+Mixed LinkedIn Only,broken_mail_999@domainxyz999.com,fake_fb_999,@fake_ig_999,williamhgates,+10000000012
