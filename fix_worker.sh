@@ -1,18 +1,11 @@
 #!/bin/bash
-echo "Updating Volknode Worker..."
-cd /root/worker-temp
-
-# Force update from Github
-git fetch origin
-git reset --hard origin/main
-
-# Update the service file to listen to the secret queue
 echo "Updating systemd service..."
-sed -i 's/-n worker@%h/-Q celery,single_checks -n worker@%h/' /etc/systemd/system/email-worker.service
 
-# Reload and restart
-echo "Restarting worker..."
+# The original file has '-n worker@volknode', we need to add the -Q flag before it
+sed -i 's/-n worker@volknode/-Q celery,single_checks -n worker@volknode/' /etc/systemd/system/email-worker.service
+
+echo "Reloading and restarting worker..."
 systemctl daemon-reload
 systemctl restart email-worker
 
-echo "Done! The worker is now protected from ghost workers and listening to single_checks."
+echo "Done! The worker is now listening to single_checks."
