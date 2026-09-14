@@ -24,11 +24,16 @@ class SingleValidationRequest(BaseModel):
 
 @router.post("/single")
 def validate_single_email(req: SingleValidationRequest):
-    from app.core.email_checker import check_email
     import time
+    from app.worker import verify_single_email_basic_task
 
     start_time = time.time()
-    status, reason = check_email(req.email)
+    task = verify_single_email_basic_task.apply_async(args=[req.email])
+    try:
+        # Wait up to 30 seconds for the Volknode worker to process it
+        status, reason = task.get(timeout=30)
+    except Exception as e:
+        status, reason = "UNKNOWN", f"Timeout or worker error: {str(e)}"
     end_time = time.time()
 
     return {
@@ -41,12 +46,16 @@ def validate_single_email(req: SingleValidationRequest):
 
 @router.post("/deep")
 def validate_email_deep(req: SingleValidationRequest):
-    """Run all 12 checks on an email using SMTP verification."""
-    from app.core.email_checker import check_email_detailed
+    """Run all 12 checks on an email using SMTP verification via Volknode Celery worker."""
     import time
+    from app.worker import verify_single_email_task
 
     start_time = time.time()
-    result = check_email_detailed(req.email)
+    task = verify_single_email_task.apply_async(args=[req.email])
+    try:
+        result = task.get(timeout=45)
+    except Exception as e:
+        raise HTTPException(status_code=504, detail=f"Worker timeout or error: {str(e)}")
     end_time = time.time()
 
     result["execution_time_ms"] = round((end_time - start_time) * 1000, 2)

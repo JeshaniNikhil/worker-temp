@@ -22,11 +22,10 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 celery_app = Celery(__name__)
 celery_app.conf.broker_url = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
+celery_app.conf.result_backend = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
 
-# PERMANENT FIX: Disable result backend. We store all results directly in 
-# PostgreSQL (ValidationResult), so we don't need Celery to track states in Redis.
-# This prevents the "Retry limit exceeded while trying to reconnect to result store" crash.
-celery_app.conf.task_ignore_result = True
+# Allow results to be stored in Redis so the API can await single verifications
+celery_app.conf.task_ignore_result = False
 
 # Ensure only 1 task runs at a time per worker to prevent SMTP overload
 celery_app.conf.worker_concurrency = 1
@@ -184,3 +183,16 @@ def process_csv_validation(self, job_id: int, file_content: str, email_column: s
         raise
     finally:
         db.close()
+
+
+@celery_app.task(bind=True, max_retries=0)
+def verify_single_email_task(self, email: str):
+    """RPC Task to run deep email validation on Volknode and return the result."""
+    from app.core.email_checker import check_email_detailed
+    return check_email_detailed(email)
+
+@celery_app.task(bind=True, max_retries=0)
+def verify_single_email_basic_task(self, email: str):
+    """RPC Task to run basic email validation on Volknode and return the result."""
+    from app.core.email_checker import check_email
+    return check_email(email)
