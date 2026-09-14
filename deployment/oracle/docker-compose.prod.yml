@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: emailplatform
     ports:
-      - "5432:5432"
+      - "5440:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -22,7 +22,7 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6390:6379"
     volumes:
       - redis_data:/data
 
@@ -32,7 +32,7 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8003 --workers 4
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://user:password@wolf-group-data-validator-db-1:5432/emailplatform
+      DATABASE_URL: postgresql://user:password@db:5432/emailplatform
     env_file: ../../.env
     depends_on:
       db:
@@ -46,7 +46,7 @@ services:
     command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=1 -Q bulk_checks -n oracle-worker@%h
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://user:password@wolf-group-data-validator-db-1:5432/emailplatform
+      DATABASE_URL: postgresql://user:password@db:5432/emailplatform
     env_file: ../../.env
     depends_on:
       db:
