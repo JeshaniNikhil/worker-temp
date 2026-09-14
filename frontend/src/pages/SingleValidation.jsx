@@ -4,35 +4,39 @@ import {
   Search, CheckCircle, XCircle, AlertTriangle, Info,
   ShieldCheck, ShieldAlert, ShieldX, Loader2,
   AtSign, Globe, Server, Mail, Eye, Zap, Clock,
-  Hash, SkipForward, Shield,
+  Hash, SkipForward, Shield, Camera, Briefcase, Phone,
+  ExternalLink, UserCheck, UserX, Smartphone
 } from 'lucide-react';
 
 const API_BASE_URL = '/api';
 
-// ─── Status Config ────────────────────────────────────────────────────────────
+const FacebookIcon = ({ size = 16, color = '#1877f2', style = {} }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle', ...style }}>
+    <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
+  </svg>
+);
+
+// ─── Status Config for Email Checks ──────────────────────────────────────────
 const STATUS_CONFIG = {
-  PASS:    { color: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.35)', icon: CheckCircle,   label: 'Pass'    },
-  FAIL:    { color: '#ef4444', bg: 'rgba(239,68,68,0.12)',  border: 'rgba(239,68,68,0.35)',  icon: XCircle,       label: 'Fail'    },
-  WARNING: { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.35)', icon: AlertTriangle, label: 'Warning' },
-  INFO:    { color: '#60a5fa', bg: 'rgba(96,165,250,0.12)', border: 'rgba(96,165,250,0.35)', icon: Info,          label: 'Info'    },
-  SKIP:    { color: '#6b7280', bg: 'rgba(107,114,128,0.10)', border: 'rgba(107,114,128,0.3)', icon: SkipForward,  label: 'Skipped' },
+  PASS:    { color: '#10b981', bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.25)', icon: CheckCircle,   label: 'Pass'    },
+  FAIL:    { color: '#ef4444', bg: 'rgba(239,68,68,0.08)',  border: 'rgba(239,68,68,0.25)',  icon: XCircle,       label: 'Fail'    },
+  WARNING: { color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.25)', icon: AlertTriangle, label: 'Warning' },
+  INFO:    { color: '#3b82f6', bg: 'rgba(59,130,246,0.08)', border: 'rgba(59,130,246,0.25)', icon: Info,          label: 'Info'    },
+  SKIP:    { color: '#6b7280', bg: 'rgba(107,114,128,0.08)', border: 'rgba(107,114,128,0.2)', icon: SkipForward,  label: 'Skipped' },
 };
 
-// ─── Overall verdict config ───────────────────────────────────────────────────
+// ─── Overall Email Verdict Config ─────────────────────────────────────────────
 const OVERALL_CONFIG = {
-  'DELIVERABLE': { color: '#10b981', glow: 'rgba(16,185,129,0.3)',  label: '🟢 DELIVERABLE',   subLabel: 'Safe to send — SMTP confirmed mailbox exists', icon: ShieldCheck },
-  'INVALID':     { color: '#ef4444', glow: 'rgba(239,68,68,0.3)',   label: '🔴 INVALID',     subLabel: 'Do not send — mailbox rejected or domain invalid', icon: ShieldX },
-  'NOT_DELIVERABLE': { color: '#ef4444', glow: 'rgba(239,68,68,0.3)', label: '🔴 NOT DELIVERABLE', subLabel: 'Do not send — SMTP explicitly rejected this address', icon: ShieldX },
-  'CATCH_ALL':   { color: '#f59e0b', glow: 'rgba(245,158,11,0.3)',  label: '⚠️ CATCH-ALL',    subLabel: 'Domain is valid but catch-all — cannot verify specific mailbox. Send with caution.', icon: ShieldAlert },
-  'RISKY':       { color: '#f97316', glow: 'rgba(249,115,22,0.3)',  label: '🟠 RISKY',       subLabel: 'SMTP verification inconclusive — temporary failure, timeout or anti-enumeration', icon: ShieldAlert },
-  'UNKNOWN':     { color: '#94a3b8', glow: 'rgba(148,163,184,0.3)', label: '⚪ UNKNOWN',     subLabel: 'Could not verify — SMTP timed out or port 25 blocked on this network', icon: Shield },
-
-  // Fallbacks for older backend responses
-  'VALID':           { color: '#10b981', glow: 'rgba(16,185,129,0.3)',  label: '🟢 VALID',   subLabel: 'Safe to send — mailbox confirmed', icon: ShieldCheck },
-  'NOT DELIVERABLE': { color: '#ef4444', glow: 'rgba(239,68,68,0.3)',   label: '🔴 INVALID', subLabel: 'Do not send — mailbox rejected or invalid', icon: ShieldX },
+  'DELIVERABLE': { color: '#10b981', bg: 'rgba(16,185,129,0.08)', border: '#10b981', label: '🟢 DELIVERABLE',   subLabel: 'Safe to send — SMTP confirmed mailbox exists', icon: ShieldCheck },
+  'INVALID':     { color: '#ef4444', bg: 'rgba(239,68,68,0.08)',  border: '#ef4444', label: '🔴 INVALID',     subLabel: 'Do not send — mailbox rejected or domain invalid', icon: ShieldX },
+  'NOT_DELIVERABLE': { color: '#ef4444', bg: 'rgba(239,68,68,0.08)', border: '#ef4444', label: '🔴 NOT DELIVERABLE', subLabel: 'Do not send — SMTP explicitly rejected this address', icon: ShieldX },
+  'CATCH_ALL':   { color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: '#f59e0b', label: '⚠️ CATCH-ALL',    subLabel: 'Domain accepts all emails — cannot verify specific mailbox', icon: ShieldAlert },
+  'RISKY':       { color: '#f97316', bg: 'rgba(249,115,22,0.08)', border: '#f97316', label: '🟠 RISKY',       subLabel: 'SMTP verification inconclusive — rate limit or timeout', icon: ShieldAlert },
+  'UNKNOWN':     { color: '#6b7280', bg: 'rgba(107,114,128,0.08)', border: '#6b7280', label: '⚪ UNKNOWN',     subLabel: 'Could not verify — SMTP timed out or port 25 blocked', icon: Shield },
+  'VALID':           { color: '#10b981', bg: 'rgba(16,185,129,0.08)', border: '#10b981', label: '🟢 VALID',   subLabel: 'Safe to send — mailbox confirmed', icon: ShieldCheck },
+  'NOT DELIVERABLE': { color: '#ef4444', bg: 'rgba(239,68,68,0.08)', border: '#ef4444', label: '🔴 INVALID', subLabel: 'Do not send — mailbox rejected or invalid', icon: ShieldX },
 };
 
-// ─── Check icons map ──────────────────────────────────────────────────────────
 const CHECK_ICONS = {
   'Syntax':               AtSign,
   'Domain Existence':     Globe,
@@ -49,7 +53,7 @@ const CHECK_ICONS = {
   'Risk Scoring':         ShieldCheck,
 };
 
-// ─── Risk Gauge ──────────────────────────────────────────────────────────────
+// ─── Risk Gauge Component ──────────────────────────────────────────────────────
 const RiskGauge = ({ score, label }) => {
   const radius = 68;
   const stroke = 10;
@@ -66,15 +70,13 @@ const RiskGauge = ({ score, label }) => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-      <svg width={160} height={160} viewBox="0 0 160 160">
-        {/* Track */}
+      <svg width={150} height={150} viewBox="0 0 160 160">
         <circle
           cx={80} cy={80} r={radius}
           fill="none"
-          stroke="rgba(255,255,255,0.07)"
+          stroke="#e5e7eb"
           strokeWidth={stroke}
         />
-        {/* Progress */}
         <circle
           cx={80} cy={80} r={radius}
           fill="none"
@@ -84,22 +86,21 @@ const RiskGauge = ({ score, label }) => {
           strokeDashoffset={offset}
           strokeLinecap="round"
           transform="rotate(-90 80 80)"
-          style={{ transition: 'stroke-dashoffset 1s ease, stroke 0.5s ease', filter: `drop-shadow(0 0 8px ${getColor()})` }}
+          style={{ transition: 'stroke-dashoffset 1s ease, stroke 0.5s ease' }}
         />
-        {/* Score text */}
-        <text x={80} y={74} textAnchor="middle" fill="white" fontSize={30} fontWeight="700" fontFamily="Inter,sans-serif">
+        <text x={80} y={74} textAnchor="middle" fill="#111827" fontSize={30} fontWeight="800" fontFamily="Inter,sans-serif">
           {score}
         </text>
-        <text x={80} y={95} textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize={11} fontFamily="Inter,sans-serif">
+        <text x={80} y={95} textAnchor="middle" fill="#6b7280" fontSize={11} fontFamily="Inter,sans-serif">
           Risk Score
         </text>
       </svg>
-      <span style={{ fontSize: 13, fontWeight: 600, color: getColor() }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 700, color: getColor() }}>{label}</span>
     </div>
   );
 };
 
-// ─── Check Card ───────────────────────────────────────────────────────────────
+// ─── Check Card Component ─────────────────────────────────────────────────────
 const CheckCard = ({ check, index }) => {
   const cfg = STATUS_CONFIG[check.status] || STATUS_CONFIG.INFO;
   const StatusIcon = cfg.icon;
@@ -107,30 +108,44 @@ const CheckCard = ({ check, index }) => {
 
   return (
     <div
-      className="check-card"
       style={{
-        '--card-color': cfg.color,
-        '--card-bg': cfg.bg,
-        '--card-border': cfg.border,
-        animationDelay: `${index * 60}ms`,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+        background: 'var(--surface-color)', border: `1px solid var(--border-color)`,
+        borderRadius: 12, padding: '0.9rem 1.1rem', boxShadow: 'var(--shadow-sm)',
+        transition: 'all 0.2s ease',
       }}
     >
-      <div className="check-card-left">
-        <div className="check-icon-wrap" style={{ background: cfg.bg, border: `1px solid ${cfg.border}` }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flex: 1, minWidth: 0 }}>
+        <div style={{
+          width: 34, height: 34, borderRadius: 8, background: cfg.bg, border: `1px solid ${cfg.border}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1
+        }}>
           <CheckIcon size={16} color={cfg.color} />
         </div>
-        <div className="check-info">
-          <span className="check-number">#{index + 1}</span>
-          <span className="check-name">{check.name}</span>
-          <span className="check-detail">{check.detail}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+          <span style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', fontWeight: 500 }}>#{index + 1}</span>
+          <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {check.name}
+          </span>
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.4, wordBreak: 'break-word' }}>
+            {check.detail}
+          </span>
           {check.score !== undefined && (
-            <span className="check-score-badge" style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', marginTop: 4, padding: '2px 8px',
+              borderRadius: 20, fontSize: '0.72rem', fontWeight: 600, width: 'fit-content',
+              background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`
+            }}>
               Score: {check.score}/100
             </span>
           )}
         </div>
       </div>
-      <div className="check-status-badge" style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px',
+        borderRadius: 20, fontSize: '0.73rem', fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0,
+        background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`
+      }}>
         <StatusIcon size={13} />
         <span>{cfg.label}</span>
       </div>
@@ -138,45 +153,70 @@ const CheckCard = ({ check, index }) => {
   );
 };
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── Single Verifiers Config ──────────────────────────────────────────────────
+const VERIFIER_TABS = [
+  { id: 'email', label: 'Email Deep Check', icon: AtSign, color: '#f97316', desc: '12-point SMTP, DNS, RDAP & Risk Score analysis' },
+  { id: 'facebook', label: 'Facebook Verifier', icon: FacebookIcon, color: '#1877f2', desc: 'Check whether a Facebook account / profile exists' },
+  { id: 'instagram', label: 'Instagram Verifier', icon: Camera, color: '#e1306c', desc: 'Check whether an Instagram profile exists' },
+  { id: 'whatsapp', label: 'WhatsApp Verifier', icon: Phone, color: '#25d366', desc: 'Check whether phone number is registered on WhatsApp' },
+  { id: 'linkedin', label: 'LinkedIn Verifier', icon: Briefcase, color: '#0077b5', desc: 'Check whether a LinkedIn profile exists' },
+  { id: 'website', label: 'Website Verifier', icon: Globe, color: '#8b5cf6', desc: 'Check whether a website is active and reachable' },
+  { id: 'phone', label: 'Phone Verifier', icon: Smartphone, color: '#f59e0b', desc: 'Validate phone number format and line type' },
+];
+
 const SingleValidation = () => {
-  const [email, setEmail] = useState('');
+  const [activeTab, setActiveTab] = useState('email');
+  const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState(null);
+  const [socialResult, setSocialResult] = useState(null);
   const [error, setError] = useState('');
 
-  const handleValidate = async (e) => {
+  const currentTabInfo = VERIFIER_TABS.find(t => t.id === activeTab);
+
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    setInputValue('');
+    setResult(null);
+    setSocialResult(null);
+    setError('');
+  };
+
+  const handleVerify = async (e) => {
     e.preventDefault();
-    if (!email || !email.includes('@')) {
-      setError('Please enter a valid email address format (e.g. name@domain.com)');
+    if (!inputValue.trim()) {
+      setError('Please enter a valid value to verify.');
       return;
     }
+
     setIsLoading(true);
     setError('');
     setResult(null);
+    setSocialResult(null);
 
     try {
-      // Step 1: Submit task — returns immediately with task_id
-      const submit = await axios.post(`${API_BASE_URL}/validation/deep`, { email });
-      const taskId = submit.data.task_id;
-
-      // Step 2: Poll every 2 seconds until done (max 3 minutes)
-      const maxAttempts = 90;
-      for (let i = 0; i < maxAttempts; i++) {
-        await new Promise(r => setTimeout(r, 2000));
-        const poll = await axios.get(`${API_BASE_URL}/validation/task/${taskId}`);
-        if (poll.data.status === 'done') {
-          setResult(poll.data.result);
-          return;
-        } else if (poll.data.status === 'error') {
-          setError(poll.data.error || 'Validation failed on worker.');
+      if (activeTab === 'email') {
+        if (!inputValue.includes('@')) {
+          setError('Please enter a valid email address format (e.g. name@domain.com)');
+          setIsLoading(false);
           return;
         }
-        // still 'pending' — keep polling
+        const res = await axios.post(`${API_BASE_URL}/validation/deep`, { email: inputValue.trim() });
+        setResult(res.data);
+      } else {
+        const endpointMap = {
+          facebook: '/social/facebook',
+          instagram: '/social/instagram',
+          whatsapp: '/social/whatsapp',
+          linkedin: '/social/linkedin',
+          website: '/social/website',
+          phone: '/social/phone',
+        };
+        const res = await axios.post(`${API_BASE_URL}/validation${endpointMap[activeTab]}`, { input: inputValue.trim() });
+        setSocialResult(res.data);
       }
-      setError('Validation timed out after 3 minutes. Please try again.');
     } catch (err) {
-      let errMsg = 'An error occurred during validation.';
+      let errMsg = 'Verification failed.';
       if (err.response?.data?.detail) {
         errMsg = typeof err.response.data.detail === 'string'
           ? err.response.data.detail
@@ -190,6 +230,142 @@ const SingleValidation = () => {
     }
   };
 
+  // Helper renderers for Social verifier results
+  const renderSocialResult = () => {
+    if (!socialResult) return null;
+
+    const { status, reason, url, number, execution_time_ms, method, confidence, evidence, user_agent, type } = socialResult;
+    const isExist = ['ACTIVE', 'WHATSAPP', 'ACTIVE_PROFILE', 'PROFILE_FOUND', 'FACEBOOK_FOUND', 'WHATSAPP_EXISTS', 'WEB_ACTIVE', 'PHONE_VALID'].includes(status);
+    const isNotExist = ['INACTIVE', 'NOT_WHATSAPP', 'INVALID', 'NOT_FOUND', 'FACEBOOK_NOT_FOUND', 'PROFILE_NOT_FOUND', 'WHATSAPP_NOT_FOUND', 'WEB_INACTIVE', 'PHONE_INVALID'].includes(status);
+
+    const targetUrl = url || (number && activeTab === 'whatsapp' ? `https://wa.me/${number.replace('+', '')}` : '');
+
+    return (
+      <div className="card animate-fade-in" style={{
+        maxWidth: 720, margin: '2rem auto 0',
+        borderTop: `4px solid ${isExist ? '#10b981' : isNotExist ? '#ef4444' : '#f59e0b'}`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 46, height: 46, borderRadius: '50%',
+              background: isExist ? 'rgba(16,185,129,0.1)' : isNotExist ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              {isExist ? <UserCheck size={24} color="#10b981" /> : isNotExist ? <UserX size={24} color="#ef4444" /> : <AlertTriangle size={24} color="#f59e0b" />}
+            </div>
+            <div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)', letterSpacing: '0.05em' }}>
+                {currentTabInfo.label} Result
+              </div>
+              <h2 style={{ margin: 0, fontSize: '1.4rem', color: isExist ? '#10b981' : isNotExist ? '#ef4444' : '#f59e0b' }}>
+                {status}
+              </h2>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+            <Clock size={14} />
+            <span>{execution_time_ms} ms</span>
+          </div>
+        </div>
+
+        {/* Input & URL info */}
+        <div style={{
+          background: 'var(--bg-color)', border: '1px solid var(--border-color)',
+          borderRadius: 8, padding: '1rem 1.25rem', marginBottom: '1.25rem',
+          display: 'flex', flexDirection: 'column', gap: 12,
+        }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Query Input</span>
+              <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.95rem' }}>{inputValue}</span>
+            </div>
+            {confidence && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Confidence</span>
+                <span style={{ 
+                  fontWeight: 700, fontSize: '0.85rem',
+                  color: confidence === 'HIGH' ? '#10b981' : confidence === 'MEDIUM' ? '#f59e0b' : '#ef4444'
+                }}>{confidence}</span>
+              </div>
+            )}
+            {method && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Verification Method</span>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{method}</span>
+              </div>
+            )}
+            {user_agent && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Agent Used</span>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={user_agent}>
+                  {user_agent.split(' ')[0]} ...
+                </span>
+              </div>
+            )}
+            {type && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Line Type</span>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{type}</span>
+              </div>
+            )}
+          </div>
+          
+          {(reason || evidence) && (
+            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {reason && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Diagnostic Reason:</span>
+                  <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)' }}>{reason}</span>
+                </div>
+              )}
+              {evidence && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Evidence:</span>
+                  <span style={{ fontSize: '0.8rem', fontFamily: 'monospace', background: 'rgba(0,0,0,0.05)', padding: '2px 6px', borderRadius: 4, color: 'var(--text-primary)' }}>{evidence}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Direct Link Button */}
+        {targetUrl && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+            {activeTab === 'whatsapp' ? (
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                Direct 1-click WhatsApp messaging link generated.
+              </span>
+            ) : <div />}
+
+            <a
+              href={targetUrl}
+              target="_blank"
+              rel="noreferrer"
+              className={activeTab === 'whatsapp' ? 'btn btn-primary' : 'btn btn-secondary'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.875rem', fontWeight: 600,
+                ...(activeTab === 'whatsapp' ? { background: '#25D366', borderColor: '#25D366', color: '#fff' } : {})
+              }}
+            >
+              {activeTab === 'whatsapp' ? (
+                <>
+                  <Phone size={15} /> Open WhatsApp Chat <ExternalLink size={14} />
+                </>
+              ) : (
+                <>
+                  Open Profile / URL <ExternalLink size={14} />
+                </>
+              )}
+            </a>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Render email result
   const overall = result
     ? (
         OVERALL_CONFIG[result.status] ||
@@ -200,9 +376,9 @@ const SingleValidation = () => {
 
   let dynamicSubLabel = overall?.subLabel;
   if (result?.catch_all && result?.status !== 'CATCH_ALL') {
-    dynamicSubLabel = 'Catch-all domain detected — the mail server accepts any address on this domain. This specific mailbox cannot be reliably verified.';
+    dynamicSubLabel = 'Catch-all domain detected — the mail server accepts any address on this domain.';
   }
-  // Separate risk scoring from display checks
+
   const displayChecks = result ? result.checks.filter(c => c.name !== 'Risk Scoring') : [];
   const riskCheck   = result ? result.checks.find(c => c.name === 'Risk Scoring') : null;
 
@@ -211,439 +387,200 @@ const SingleValidation = () => {
   const warnCount    = displayChecks.filter(c => c.status === 'WARNING').length;
 
   return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    <div className="animate-fade-in" style={{ maxWidth: 1000, margin: '0 auto', paddingBottom: '3rem' }}>
+      
+      {/* Page Header */}
+      <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+        <h1 style={{ fontSize: '2.1rem', marginBottom: '0.4rem', fontWeight: 800 }}>Single Data Verifier</h1>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
+          Select a single verification module to test individual email or social media accounts in real-time.
+        </p>
+      </div>
 
-        .sv-page {
-          font-family: 'Inter', sans-serif;
-          min-height: 100vh;
-          background: #0a0f1e;
-          padding: 2rem 1.5rem 4rem;
-          color: #e2e8f0;
-        }
-
-        .sv-header {
-          text-align: center;
-          margin-bottom: 2.5rem;
-        }
-        .sv-header h1 {
-          font-size: 2.2rem;
-          font-weight: 800;
-          background: linear-gradient(135deg, #818cf8, #c084fc, #38bdf8);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          margin: 0 0 0.5rem;
-        }
-        .sv-header p {
-          color: rgba(255,255,255,0.45);
-          font-size: 0.95rem;
-          margin: 0;
-        }
-
-        .sv-search-card {
-          max-width: 680px;
-          margin: 0 auto 2rem;
-          background: rgba(255,255,255,0.04);
-          border: 1px solid rgba(255,255,255,0.10);
-          border-radius: 16px;
-          padding: 1.75rem;
-          backdrop-filter: blur(16px);
-        }
-
-        .sv-form {
-          display: flex;
-          gap: 0.75rem;
-          align-items: center;
-        }
-        @media (max-width: 560px) { .sv-form { flex-direction: column; } }
-
-        .sv-input-wrap {
-          flex: 1;
-          position: relative;
-        }
-        .sv-input-icon {
-          position: absolute;
-          left: 14px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: rgba(255,255,255,0.3);
-          pointer-events: none;
-        }
-        .sv-input {
-          width: 100%;
-          padding: 0.85rem 1rem 0.85rem 2.75rem;
-          background: rgba(255,255,255,0.06);
-          border: 1px solid rgba(255,255,255,0.12);
-          border-radius: 10px;
-          color: #f0f4ff;
-          font-size: 0.95rem;
-          font-family: 'Inter', sans-serif;
-          outline: none;
-          box-sizing: border-box;
-          transition: border-color 0.2s, box-shadow 0.2s;
-        }
-        .sv-input:focus {
-          border-color: rgba(129,140,248,0.6);
-          box-shadow: 0 0 0 3px rgba(129,140,248,0.12);
-        }
-        .sv-input::placeholder { color: rgba(255,255,255,0.28); }
-
-        .sv-btn {
-          display: flex; align-items: center; gap: 8px;
-          padding: 0.85rem 1.6rem;
-          background: linear-gradient(135deg, #6366f1, #8b5cf6);
-          border: none; border-radius: 10px;
-          color: white; font-size: 0.9rem; font-weight: 600;
-          cursor: pointer; white-space: nowrap;
-          font-family: 'Inter', sans-serif;
-          transition: opacity 0.2s, transform 0.15s;
-          box-shadow: 0 4px 18px rgba(99,102,241,0.35);
-        }
-        .sv-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .sv-btn:not(:disabled):hover { transform: translateY(-1px); opacity: 0.92; }
-
-        .sv-error {
-          margin-top: 1rem;
-          padding: 0.75rem 1rem;
-          background: rgba(239,68,68,0.12);
-          border: 1px solid rgba(239,68,68,0.3);
-          border-radius: 8px;
-          color: #fca5a5;
-          font-size: 0.875rem;
-        }
-
-        .sv-loading {
-          display: flex; flex-direction: column;
-          align-items: center; gap: 1rem;
-          padding: 3rem 0;
-          color: rgba(255,255,255,0.5);
-        }
-        .sv-spinner { animation: spin 0.8s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        /* ── Results Layout ── */
-        .sv-results {
-          max-width: 940px;
-          margin: 0 auto;
-          animation: fadeUp 0.4s ease;
-        }
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(20px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-
-        .sv-summary-row {
-          display: grid;
-          grid-template-columns: 1fr auto 1fr;
-          gap: 1.25rem;
-          margin-bottom: 1.5rem;
-          align-items: stretch;
-        }
-        @media (max-width: 720px) { .sv-summary-row { grid-template-columns: 1fr; } }
-
-        .sv-overall-card {
-          background: rgba(255,255,255,0.04);
-          border: 1px solid rgba(255,255,255,0.10);
-          border-radius: 16px;
-          padding: 1.5rem;
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          gap: 0.5rem;
-        }
-        .sv-overall-label {
-          font-size: 0.75rem;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-          color: rgba(255,255,255,0.4);
-        }
-        .sv-overall-status {
-          display: flex; align-items: center; gap: 10px;
-          font-size: 1.8rem; font-weight: 800;
-        }
-        .sv-overall-email {
-          font-size: 0.85rem;
-          color: rgba(255,255,255,0.5);
-          font-family: 'Courier New', monospace;
-          word-break: break-all;
-        }
-
-        .sv-stats {
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-          justify-content: center;
-        }
-        .sv-stat-row {
-          display: flex; align-items: center; gap: 8px;
-          font-size: 0.875rem;
-        }
-        .sv-stat-dot {
-          width: 10px; height: 10px; border-radius: 50%;
-          flex-shrink: 0;
-        }
-        .sv-stat-num { font-weight: 700; font-size: 1rem; }
-
-        .sv-gauge-card {
-          background: rgba(255,255,255,0.04);
-          border: 1px solid rgba(255,255,255,0.10);
-          border-radius: 16px;
-          padding: 1.5rem;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 0.5rem;
-        }
-
-        .sv-timing {
-          display: flex; align-items: center; gap: 6px;
-          font-size: 0.78rem;
-          color: rgba(255,255,255,0.35);
-          margin-top: 0.25rem;
-        }
-
-        /* ── Checks grid ── */
-        .checks-section-title {
-          font-size: 0.78rem;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-          color: rgba(255,255,255,0.35);
-          margin: 0 0 0.75rem;
-        }
-
-        .checks-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
-          gap: 0.75rem;
-          margin-bottom: 1.5rem;
-        }
-        @media (max-width: 600px) { .checks-grid { grid-template-columns: 1fr; } }
-
-        .check-card {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          background: rgba(255,255,255,0.035);
-          border: 1px solid rgba(255,255,255,0.08);
-          border-radius: 12px;
-          padding: 1rem 1.1rem;
-          animation: cardIn 0.35s ease both;
-          transition: border-color 0.2s, background 0.2s;
-        }
-        .check-card:hover {
-          background: rgba(255,255,255,0.06);
-          border-color: var(--card-border);
-        }
-        @keyframes cardIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-
-        .check-card-left {
-          display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 0;
-        }
-        .check-icon-wrap {
-          width: 34px; height: 34px; border-radius: 8px;
-          display: flex; align-items: center; justify-content: center;
-          flex-shrink: 0; margin-top: 1px;
-        }
-        .check-info {
-          display: flex; flex-direction: column; gap: 2px; min-width: 0;
-        }
-        .check-number {
-          font-size: 0.68rem;
-          color: rgba(255,255,255,0.3);
-          font-weight: 500;
-        }
-        .check-name {
-          font-size: 0.9rem;
-          font-weight: 600;
-          color: rgba(255,255,255,0.92);
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .check-detail {
-          font-size: 0.78rem;
-          color: rgba(255,255,255,0.45);
-          line-height: 1.4;
-          word-break: break-word;
-        }
-        .check-score-badge {
-          display: inline-flex;
-          align-items: center;
-          margin-top: 4px;
-          padding: 2px 8px;
-          border-radius: 20px;
-          font-size: 0.72rem;
-          font-weight: 600;
-          width: fit-content;
-        }
-        .check-status-badge {
-          display: flex; align-items: center; gap: 5px;
-          padding: 4px 10px;
-          border-radius: 20px;
-          font-size: 0.73rem;
-          font-weight: 600;
-          white-space: nowrap;
-          flex-shrink: 0;
-        }
-
-        /* ── Normalized email banner ── */
-        .sv-norm-banner {
-          background: rgba(96,165,250,0.08);
-          border: 1px solid rgba(96,165,250,0.25);
-          border-radius: 10px;
-          padding: 0.85rem 1.1rem;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          font-size: 0.85rem;
-          color: rgba(255,255,255,0.7);
-          margin-bottom: 1.5rem;
-        }
-        .sv-norm-banner strong { color: #93c5fd; font-family: 'Courier New', monospace; }
-      `}</style>
-
-      <div className="sv-page">
-        {/* Header */}
-        <div className="sv-header">
-          <h1>Email Deep Validator</h1>
-          <p>12-point analysis — Syntax · DNS · RDAP · SMTP Mailbox · Risk Score</p>
-        </div>
-
-        {/* Search Card */}
-        <div className="sv-search-card">
-          <form onSubmit={handleValidate} className="sv-form">
-            <div className="sv-input-wrap">
-              <AtSign className="sv-input-icon" size={18} />
-              <input
-                id="email-input"
-                type="text"
-                className="sv-input"
-                placeholder="Enter email address to validate…"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                disabled={isLoading}
-                autoFocus
-              />
-            </div>
-            <button type="submit" className="sv-btn" disabled={isLoading || !email} id="validate-btn">
-              {isLoading
-                ? <><Loader2 size={16} className="sv-spinner" />Analysing…</>
-                : <><Search size={16} />Run All 12 Checks</>}
-            </button>
-          </form>
-          {error && <div className="sv-error">{error}</div>}
-        </div>
-
-        {/* Loading */}
-        {isLoading && (
-          <div className="sv-loading">
-            <Loader2 size={36} className="sv-spinner" color="#818cf8" />
-            <span>Running 12 checks — DNS · RDAP · Reputation · Risk…</span>
-          </div>
-        )}
-
-        {/* Results */}
-        {result && !isLoading && (
-          <div className="sv-results">
-
-            {/* Normalized email banner */}
-            {result.normalized_email !== result.email && (
-              <div className="sv-norm-banner">
-                <Info size={16} color="#60a5fa" />
-                Normalized email: <strong>{result.normalized_email}</strong>
-              </div>
-            )}
-
-            {/* Summary row */}
-            <div className="sv-summary-row">
-              {/* Overall status */}
-              <div className="sv-overall-card" style={{
-                border: `1px solid ${overall.glow || overall.color}`,
-                boxShadow: `0 0 24px ${overall.glow || 'rgba(0,0,0,0.3)'}`,
+      {/* Verifier Selector Tabs */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '0.75rem',
+        marginBottom: '2rem',
+      }}>
+        {VERIFIER_TABS.map(tab => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <div
+              key={tab.id}
+              onClick={() => handleTabChange(tab.id)}
+              style={{
+                background: 'var(--surface-color)',
+                border: `2px solid ${isActive ? tab.color : 'var(--border-color)'}`,
+                borderRadius: 12, padding: '1rem 0.9rem', cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: isActive ? `0 4px 12px ${tab.color}22` : 'var(--shadow-sm)',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', textCenter: 'center',
+              }}
+            >
+              <div style={{
+                width: 38, height: 38, borderRadius: '50%',
+                background: isActive ? `${tab.color}15` : 'var(--bg-color)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8,
               }}>
-                <span className="sv-overall-label">📬 Campaign Decision</span>
-                <div className="sv-overall-status" style={{ color: overall.color, fontSize: '1.5rem', fontWeight: 800 }}>
-                  {React.createElement(overall.icon, { size: 28, color: overall.color })}
-                  {overall.label}
-                </div>
-                {dynamicSubLabel && (
-                  <div style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.55)', marginTop: '0.25rem', lineHeight: 1.4 }}>
-                    {dynamicSubLabel}
-                  </div>
-                )}
-                <div className="sv-overall-email">{result.email}</div>
-                {result.execution_time_ms && (
-                  <div className="sv-timing">
-                    <Clock size={12} />
-                    {result.execution_time_ms} ms
-                  </div>
-                )}
+                <Icon size={20} color={tab.color} />
               </div>
-
-              {/* Gauge */}
-              <div className="sv-gauge-card">
-                <RiskGauge score={result.risk_score} label={result.risk_label} />
-              </div>
-
-              {/* Stats */}
-              <div className="sv-overall-card">
-                <span className="sv-overall-label">Check Summary</span>
-                <div className="sv-stats">
-                  <div className="sv-stat-row">
-                    <div className="sv-stat-dot" style={{ background: '#10b981' }} />
-                    <span className="sv-stat-num" style={{ color: '#10b981' }}>{passCount}</span>
-                    <span style={{ color: 'rgba(255,255,255,0.5)' }}>checks passed</span>
-                  </div>
-                  <div className="sv-stat-row">
-                    <div className="sv-stat-dot" style={{ background: '#f59e0b' }} />
-                    <span className="sv-stat-num" style={{ color: '#f59e0b' }}>{warnCount}</span>
-                    <span style={{ color: 'rgba(255,255,255,0.5)' }}>warnings</span>
-                  </div>
-                  <div className="sv-stat-row">
-                    <div className="sv-stat-dot" style={{ background: '#ef4444' }} />
-                    <span className="sv-stat-num" style={{ color: '#ef4444' }}>{failCount}</span>
-                    <span style={{ color: 'rgba(255,255,255,0.5)' }}>failed</span>
-                  </div>
-                  <div className="sv-stat-row">
-                    <div className="sv-stat-dot" style={{ background: '#6b7280' }} />
-                    <span className="sv-stat-num" style={{ color: '#6b7280' }}>
-                      {displayChecks.filter(c => c.status === 'SKIP').length}
-                    </span>
-                    <span style={{ color: 'rgba(255,255,255,0.5)' }}>skipped</span>
-                  </div>
-                </div>
-              </div>
+              <span style={{ fontWeight: 700, fontSize: '0.88rem', color: isActive ? tab.color : 'var(--text-primary)', marginBottom: 2 }}>
+                {tab.label}
+              </span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', textAlign: 'center', lineHeight: 1.3 }}>
+                {tab.id === 'email' ? '12-point checks' : 'Account lookup'}
+              </span>
             </div>
+          );
+        })}
+      </div>
 
-            {/* All 11 check cards */}
-            <p className="checks-section-title">Individual Check Results</p>
-            <div className="checks-grid">
-              {displayChecks.map((check, i) => (
-                <CheckCard key={check.name} check={check} index={i} />
-              ))}
-            </div>
+      {/* Input Search Card */}
+      <div className="card" style={{ maxWidth: 720, margin: '0 auto' }}>
+        <div style={{ marginBottom: '1.25rem' }}>
+          <h3 style={{ margin: '0 0 0.2rem', display: 'flex', alignItems: 'center', gap: 8, color: currentTabInfo.color }}>
+            {React.createElement(currentTabInfo.icon, { size: 20 })}
+            {currentTabInfo.label}
+          </h3>
+          <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+            {currentTabInfo.desc}
+          </p>
+        </div>
 
-            {/* Risk scoring card full-width */}
-            {riskCheck && (
-              <>
-                <p className="checks-section-title">Combined Risk Score</p>
-                <div className="checks-grid" style={{ gridTemplateColumns: '1fr' }}>
-                  <CheckCard check={riskCheck} index={displayChecks.length} />
-                </div>
-              </>
+        <form onSubmit={handleVerify} style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 260, position: 'relative' }}>
+            <input
+              type="text"
+              className="form-control"
+              placeholder={
+                activeTab === 'email' ? 'Enter email address (e.g. alex@example.com)…' :
+                activeTab === 'facebook' ? 'Enter Facebook username or profile URL…' :
+                activeTab === 'instagram' ? 'Enter Instagram handle or profile URL…' :
+                activeTab === 'whatsapp' ? 'Enter phone number with country code (e.g. +14155552671)…' :
+                activeTab === 'linkedin' ? 'Enter LinkedIn username or profile URL…' :
+                activeTab === 'website' ? 'Enter website URL (e.g. example.com)…' :
+                'Enter phone number (e.g. +14155552671)…'
+              }
+              value={inputValue}
+              onChange={e => setInputValue(e.target.value)}
+              disabled={isLoading}
+              style={{ paddingLeft: '1rem', paddingRight: '1rem', height: 46 }}
+              autoFocus
+            />
+          </div>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={isLoading || !inputValue.trim()}
+            style={{
+              height: 46, padding: '0 1.5rem', whiteSpace: 'nowrap',
+              background: currentTabInfo.color, borderColor: currentTabInfo.color,
+            }}
+          >
+            {isLoading ? (
+              <><Loader2 size={18} style={{ animation: 'spin 0.8s linear infinite' }} /> Verifying…</>
+            ) : (
+              <><Search size={18} /> Verify Existence</>
             )}
+          </button>
+        </form>
+
+        {error && (
+          <div style={{
+            marginTop: '1rem', padding: '0.85rem 1rem', background: 'rgba(239,68,68,0.08)',
+            borderLeft: '4px solid #ef4444', color: '#dc2626', borderRadius: '0 8px 8px 0', fontSize: '0.875rem'
+          }}>
+            {error}
           </div>
         )}
       </div>
-    </>
+
+      {/* Social verification result output */}
+      {socialResult && !isLoading && renderSocialResult()}
+
+      {/* Email verification detailed results */}
+      {activeTab === 'email' && result && !isLoading && (
+        <div className="animate-fade-in" style={{ marginTop: '2rem' }}>
+          
+          {/* Summary Row */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: '1.2fr 0.8fr 1fr', gap: '1.25rem', marginBottom: '1.5rem'
+          }}>
+            {/* Overall status */}
+            <div className="card" style={{
+              background: 'var(--surface-color)', borderLeft: `5px solid ${overall.color}`,
+              display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 6,
+            }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)' }}>
+                📬 Campaign Verdict
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '1.6rem', fontWeight: 800, color: overall.color }}>
+                {React.createElement(overall.icon, { size: 28, color: overall.color })}
+                {overall.label}
+              </div>
+              {dynamicSubLabel && (
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                  {dynamicSubLabel}
+                </div>
+              )}
+              <div style={{ fontFamily: 'monospace', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginTop: 4 }}>
+                {result.email}
+              </div>
+              {result.execution_time_ms && (
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                  <Clock size={12} /> {result.execution_time_ms} ms
+                </div>
+              )}
+            </div>
+
+            {/* Gauge */}
+            <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <RiskGauge score={result.risk_score} label={result.risk_label} />
+            </div>
+
+            {/* Stats */}
+            <div className="card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 8 }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-secondary)' }}>
+                Check Summary
+              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                  <span style={{ color: '#10b981', fontWeight: 600 }}>Passed Checks</span>
+                  <span style={{ fontWeight: 800, color: '#10b981' }}>{passCount}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                  <span style={{ color: '#f59e0b', fontWeight: 600 }}>Warnings</span>
+                  <span style={{ fontWeight: 800, color: '#f59e0b' }}>{warnCount}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
+                  <span style={{ color: '#ef4444', fontWeight: 600 }}>Failed Checks</span>
+                  <span style={{ fontWeight: 800, color: '#ef4444' }}>{failCount}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Individual Checks Grid */}
+          <h3 style={{ fontSize: '1rem', color: 'var(--text-primary)', marginBottom: '0.9rem' }}>
+            Detailed 12-Point Analysis
+          </h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', gap: '0.85rem' }}>
+            {displayChecks.map((check, i) => (
+              <CheckCard key={check.name} check={check} index={i} />
+            ))}
+          </div>
+
+          {riskCheck && (
+            <div style={{ marginTop: '1rem' }}>
+              <CheckCard check={riskCheck} index={displayChecks.length} />
+            </div>
+          )}
+        </div>
+      )}
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
   );
 };
 

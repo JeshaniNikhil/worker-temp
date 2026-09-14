@@ -256,3 +256,5 @@ async def validate_social(platform: str, req: dict):
         return check_website(target)
     else:
         raise HTTPException(status_code=404, detail="Platform not found")
+
+

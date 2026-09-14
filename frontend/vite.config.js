@@ -8,10 +8,17 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       '/api': {
-        target: process.env.VITE_API_TARGET || 'http://api2:8003',
+        target: process.env.VITE_API_TARGET || 'http://localhost:8003',
         changeOrigin: true
       }
     }
+  },
+  build: {
+    // Do NOT externalize system files - they should never be imported
+    rollupOptions: {}
+  },
+  // Prevent Vite from scanning host-system files as modules
+  optimizeDeps: {
+    exclude: []
   }
 })
-
