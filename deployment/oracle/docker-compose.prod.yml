@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: emailplatform
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ev-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  api2:
+    build:
+      context: ../../backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8003 --workers 4
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://user:password@db:5432/emailplatform
+    env_file: ../../.env
+    depends_on:
+      db:
+        condition: service_healthy
+      ev-redis:
+        condition: service_started
+
+#  worker:
+#    build:
+#      context: ../../backend
+#    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=1 -n worker@%h
+#    restart: unless-stopped
+#    environment:
+#      DATABASE_URL: postgresql://user:password@db:5432/emailplatform
+#    env_file: ../../.env
+#    depends_on:
+#      db:
+#        condition: service_healthy
+#      ev-redis:
+#        condition: service_started
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile.prod
+    ports:
+      - "127.0.0.1:8081:80"
+    restart: unless-stopped
+    depends_on:
+      - api2
+
+volumes:
+  postgres_data:
+  redis_data:
