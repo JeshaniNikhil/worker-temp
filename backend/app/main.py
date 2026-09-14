@@ -2,7 +2,7 @@ import time
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import validation, templates, spam
+from app.api.routes import validation, templates, spam, auth
 from app.models.database import engine, Base
 from app.models import models
 from sqlalchemy.exc import OperationalError
@@ -45,6 +45,7 @@ app.add_middleware(
 app.include_router(validation.router, prefix="/api/validation", tags=["validation"])
 app.include_router(templates.router, prefix="/api/templates", tags=["templates"])
 app.include_router(spam.router, prefix="/api/spam", tags=["spam"])
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 
 
 @app.get("/")
