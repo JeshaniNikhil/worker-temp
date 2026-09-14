@@ -43,7 +43,7 @@ services:
   worker:
     build:
       context: ../../backend
-    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=1 -Q bulk_checks -n oracle-worker@%h
+    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=1 -Q bulk_checks,single_checks,celery -n oracle-worker@%h
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://user:password@db:5432/emailplatform
