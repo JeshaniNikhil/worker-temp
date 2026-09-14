@@ -28,7 +28,6 @@ services:
       - "127.0.0.1:8003:8003"
     networks:
       - default
-      - mailcow-network
     volumes:
       - ./backend:/app
     environment:
@@ -37,10 +36,14 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
 
-      SMTP_SOURCE_IP: 169.58.234.98
+      # SOCKS5 Proxy (Volknode) for SMTP via port 25
+      SOCKS5_PROXY_HOST: 87.251.66.181
+      SOCKS5_PROXY_PORT: 1080
+      SOCKS5_PROXY_USER: smtpuser
+      SOCKS5_PROXY_PASS: change_me_proxy_password
+
       SMTP_VERIFICATION_FROM: verify@validator.wolfgroupindia.com
       SMTP_HELO_HOST: validator.wolfgroupindia.com
-      HELO_HOST: validator.wolfgroupindia.com
 
     depends_on:
       - db
@@ -62,13 +65,16 @@ services:
       CELERY_BROKER_URL: redis://127.0.0.1:6381/0
       CELERY_RESULT_BACKEND: redis://127.0.0.1:6381/0
 
-      SMTP_SOURCE_IP: 169.58.234.98
+      # SOCKS5 Proxy (Volknode) for SMTP via port 25
+      SOCKS5_PROXY_HOST: 87.251.66.181
+      SOCKS5_PROXY_PORT: 1080
+      SOCKS5_PROXY_USER: smtpuser
+      SOCKS5_PROXY_PASS: change_me_proxy_password
+
       SMTP_VERIFICATION_FROM: verify@validator.wolfgroupindia.com
       SMTP_HELO_HOST: validator.wolfgroupindia.com
-      HELO_HOST: validator.wolfgroupindia.com
 
-      # Rate limiting — seconds between each SMTP check (safe for Contabo)
-      # 100 emails ≈ 4 mins | 500 emails ≈ 20 mins | 1000 emails ≈ 40 mins
+      # Rate limiting — seconds between each SMTP check
       SMTP_DELAY_MIN: "5.0"
       SMTP_DELAY_MAX: "7.0"
 
@@ -99,7 +105,3 @@ volumes:
 networks:
   default:
     name: email-validator_default
-
-  mailcow-network:
-    external: true
-    name: mailcowdockerized_mailcow-network
