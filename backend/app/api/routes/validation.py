@@ -28,7 +28,7 @@ def validate_single_email(req: SingleValidationRequest):
     from app.worker import verify_single_email_basic_task
 
     start_time = time.time()
-    task = verify_single_email_basic_task.apply_async(args=[req.email])
+    task = verify_single_email_basic_task.apply_async(args=[req.email], queue="single_checks")
     try:
         # Wait up to 30 seconds for the Volknode worker to process it
         status, reason = task.get(timeout=30)
@@ -51,7 +51,7 @@ def validate_email_deep(req: SingleValidationRequest):
     from app.worker import verify_single_email_task
 
     start_time = time.time()
-    task = verify_single_email_task.apply_async(args=[req.email])
+    task = verify_single_email_task.apply_async(args=[req.email], queue="single_checks")
     try:
         result = task.get(timeout=45)
     except Exception as e:
