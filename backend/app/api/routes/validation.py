@@ -24,42 +24,32 @@ class SingleValidationRequest(BaseModel):
 
 @router.post("/single")
 def validate_single_email(req: SingleValidationRequest):
-    import time
+    """Submit basic email check to Volknode. Returns task_id immediately."""
     from app.worker import verify_single_email_basic_task
-
-    start_time = time.time()
     task = verify_single_email_basic_task.apply_async(args=[req.email], queue="single_checks")
-    try:
-        # Wait up to 30 seconds for the Volknode worker to process it
-        status, reason = task.get(timeout=30)
-    except Exception as e:
-        status, reason = "UNKNOWN", f"Timeout or worker error: {str(e)}"
-    end_time = time.time()
-
-    return {
-        "email": req.email,
-        "status": status,
-        "reason": reason,
-        "execution_time_ms": round((end_time - start_time) * 1000, 2)
-    }
+    return {"task_id": task.id, "status": "pending", "email": req.email}
 
 
 @router.post("/deep")
 def validate_email_deep(req: SingleValidationRequest):
-    """Run all 12 checks on an email using SMTP verification via Volknode Celery worker."""
-    import time
+    """Submit deep 12-point email check to Volknode. Returns task_id immediately."""
     from app.worker import verify_single_email_task
-
-    start_time = time.time()
     task = verify_single_email_task.apply_async(args=[req.email], queue="single_checks")
-    try:
-        result = task.get(timeout=45)
-    except Exception as e:
-        raise HTTPException(status_code=504, detail=f"Worker timeout or error: {str(e)}")
-    end_time = time.time()
+    return {"task_id": task.id, "status": "pending", "email": req.email}
 
-    result["execution_time_ms"] = round((end_time - start_time) * 1000, 2)
-    return result
+
+@router.get("/task/{task_id}")
+def get_task_status(task_id: str):
+    """Poll for the result of a submitted verification task."""
+    from app.worker import celery_app
+    result = celery_app.AsyncResult(task_id)
+    state = result.state
+    if state == "SUCCESS":
+        return {"status": "done", "result": result.get()}
+    elif state == "FAILURE":
+        return {"status": "error", "error": str(result.result)}
+    else:
+        return {"status": "pending"}
 
 
 @router.post("/upload", response_model=ValidationJobResponse)

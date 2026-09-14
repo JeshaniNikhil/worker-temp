@@ -156,8 +156,25 @@ const SingleValidation = () => {
     setResult(null);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/validation/deep`, { email });
-      setResult(response.data);
+      // Step 1: Submit task — returns immediately with task_id
+      const submit = await axios.post(`${API_BASE_URL}/validation/deep`, { email });
+      const taskId = submit.data.task_id;
+
+      // Step 2: Poll every 2 seconds until done (max 3 minutes)
+      const maxAttempts = 90;
+      for (let i = 0; i < maxAttempts; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const poll = await axios.get(`${API_BASE_URL}/validation/task/${taskId}`);
+        if (poll.data.status === 'done') {
+          setResult(poll.data.result);
+          return;
+        } else if (poll.data.status === 'error') {
+          setError(poll.data.error || 'Validation failed on worker.');
+          return;
+        }
+        // still 'pending' — keep polling
+      }
+      setError('Validation timed out after 3 minutes. Please try again.');
     } catch (err) {
       let errMsg = 'An error occurred during validation.';
       if (err.response?.data?.detail) {
