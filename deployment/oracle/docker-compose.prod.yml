@@ -32,7 +32,7 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8003 --workers 4
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://user:password@db:5432/emailplatform
+      DATABASE_URL: postgresql://user:password@wolf-group-data-validator-db-1:5432/emailplatform
     env_file: ../../.env
     depends_on:
       db:
