@@ -33,6 +33,9 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://user:password@db:5432/emailplatform
+      CELERY_BROKER_URL: redis://ev-redis:6379/0
+      CELERY_RESULT_BACKEND: redis://ev-redis:6379/0
+      REDIS_URL: redis://ev-redis:6379/0
     env_file: ../../.env
     depends_on:
       db:
@@ -47,6 +50,9 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://user:password@db:5432/emailplatform
+      CELERY_BROKER_URL: redis://ev-redis:6379/0
+      CELERY_RESULT_BACKEND: redis://ev-redis:6379/0
+      REDIS_URL: redis://ev-redis:6379/0
     env_file: ../../.env
     depends_on:
       db:
