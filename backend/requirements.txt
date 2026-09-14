@@ -11,3 +11,5 @@ email-validator
 python-multipart
 httpx
 jinja2
+python-jose[cryptography]
+passlib[bcrypt]
