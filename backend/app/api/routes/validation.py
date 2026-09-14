@@ -99,7 +99,7 @@ async def upload_csv(
 
         # Dispatch to Celery worker via Redis broker (fire-and-forget)
         # ignore_result=True prevents the API from trying to connect to a result backend
-        process_csv_validation.apply_async(args=[job.id, content_str, email_column], ignore_result=True)
+        process_csv_validation.apply_async(args=[job.id, content_str, email_column], queue="bulk_checks", ignore_result=True)
 
         return job
     except HTTPException:

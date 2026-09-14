@@ -113,7 +113,11 @@ def process_csv_validation(self, job_id: int, file_content: str, email_column: s
 
             # --- Validate single email ---
             try:
-                status, reason = check_email(email)
+                # Dispatch to Volknode worker because Oracle blocks port 25
+                from app.worker import verify_single_email_basic_task
+                result_tuple = verify_single_email_basic_task.apply_async(args=[email], queue="single_checks").get(timeout=60)
+                status, reason = result_tuple
+
             except Exception as exc:
                 logger.error(
                     f"[WORKER] Job {job_id}: Exception validating {email}: {exc}",

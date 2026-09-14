@@ -40,19 +40,19 @@ services:
       ev-redis:
         condition: service_started
 
-#  worker:
-#    build:
-#      context: ../../backend
-#    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=1 -n worker@%h
-#    restart: unless-stopped
-#    environment:
-#      DATABASE_URL: postgresql://user:password@db:5432/emailplatform
-#    env_file: ../../.env
-#    depends_on:
-#      db:
-#        condition: service_healthy
-#      ev-redis:
-#        condition: service_started
+  worker:
+    build:
+      context: ../../backend
+    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=1 -Q bulk_checks -n oracle-worker@%h
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://user:password@wolf-group-data-validator-db-1:5432/emailplatform
+    env_file: ../../.env
+    depends_on:
+      db:
+        condition: service_healthy
+      ev-redis:
+        condition: service_started
 
   frontend:
     build:
