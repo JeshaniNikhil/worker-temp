@@ -230,3 +230,30 @@ def download_results(
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=validated_{job.filename}"}
     )
+
+@router.post("/social/{platform}")
+async def validate_social(platform: str, req: dict):
+    from app.core.social_checker import check_phone, check_whatsapp, check_facebook, check_instagram, check_linkedin, check_website
+    
+    # Try to extract the target string from common payload keys
+    target = req.get("target") or req.get("phone") or req.get("number") or req.get("url") or req.get("username") or req.get("email") or req.get("raw") or ""
+    
+    if not target and len(req.values()) > 0:
+        target = list(req.values())[0]
+
+    target = str(target)
+
+    if platform == "phone":
+        return check_phone(target)
+    elif platform == "whatsapp":
+        return check_whatsapp(target)
+    elif platform == "facebook":
+        return check_facebook(target)
+    elif platform == "instagram":
+        return check_instagram(target)
+    elif platform == "linkedin":
+        return check_linkedin(target)
+    elif platform == "website":
+        return check_website(target)
+    else:
+        raise HTTPException(status_code=404, detail="Platform not found")
