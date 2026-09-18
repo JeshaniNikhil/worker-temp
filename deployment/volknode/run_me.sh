@@ -1,40 +1,26 @@
 #!/bin/bash
-# Volknode Auto-Setup Script - Run this once!
-# No Docker required - Pure Python setup
-# Works with /opt/worker-temp/ path
-
-set -e
+# Volknode SOCKS5 Setup - Simple and Direct
+# Just run: bash run_me.sh
 
 echo "=========================================="
 echo "  Volknode SOCKS5 Auto Setup"
 echo "=========================================="
 echo ""
 
-# Detect if we're in worker-temp or wolf-group-data-validator
-if [ -d "/opt/worker-temp" ]; then
-    PROJECT_PATH="/opt/worker-temp"
-    echo "✓ Found /opt/worker-temp"
-elif [ -d "/opt/wolf-group-data-validator" ]; then
-    PROJECT_PATH="/opt/wolf-group-data-validator"
-    echo "✓ Found /opt/wolf-group-data-validator"
-else
-    echo "❌ Neither /opt/worker-temp nor /opt/wolf-group-data-validator found"
-    exit 1
-fi
+# Get current directory (should be /opt/worker-temp/deployment/volknode)
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$(dirname $(dirname $SCRIPT_DIR))"
 
-cd "$PROJECT_PATH"
+echo "[1/3] Installing dependencies..."
+pip3 install -q pysocks 2>/dev/null || pip install -q pysocks
 
-# Step 1: Install Python dependencies
-echo "[STEP 1/3] Installing Python dependencies..."
-pip3 install -q pysocks dnspython 2>/dev/null || pip install -q pysocks dnspython
-
-# Step 2: Create SOCKS5 directory and Python script
-echo "[STEP 2/3] Creating SOCKS5 server..."
+echo "[2/3] Creating SOCKS5 server..."
 mkdir -p /opt/volknode-socks5
 
 cat > /opt/volknode-socks5/socks5_server.py << 'PYTHON_SOCKS5'
 #!/usr/bin/env python3
-import socket, struct, select, logging, sys
+import socket, struct, select, logging, sys, signal
+
 logging.basicConfig(level=logging.INFO, format='[SOCKS5] %(message)s')
 logger = logging.getLogger()
 
@@ -96,13 +82,20 @@ def handle_client(c):
         except:
             pass
 
+def signal_handler(sig, frame):
+    logger.info("Shutting down...")
+    sys.exit(0)
+
 s = socket.socket()
 s.setsockopt(1, 15, 1)
 s.bind(('0.0.0.0', 1080))
 s.listen(10)
+signal.signal(signal.SIGINT, signal_handler)
+
 logger.info("SOCKS5 listening on 0.0.0.0:1080")
 logger.info("Username: smtpuser")
 logger.info("Password: change_me_proxy_password")
+
 try:
     while True:
         try:
@@ -120,18 +113,17 @@ PYTHON_SOCKS5
 
 chmod +x /opt/volknode-socks5/socks5_server.py
 
-# Step 3: Start SOCKS5 server
-echo "[STEP 3/3] Starting SOCKS5 server..."
+echo "[3/3] Starting SOCKS5 server..."
 echo ""
 echo "=========================================="
-echo "  ✅ SOCKS5 Server Starting!"
+echo "  ✅ SOCKS5 Server Running!"
 echo "=========================================="
 echo ""
-echo "Port: 1080"
+echo "Listening on: 0.0.0.0:1080"
 echo "Username: smtpuser"
 echo "Password: change_me_proxy_password"
 echo ""
-echo "Now testing connection..."
+echo "Press CTRL+C to stop"
 echo ""
 
 python3 /opt/volknode-socks5/socks5_server.py
