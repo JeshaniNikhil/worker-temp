@@ -1,6 +1,7 @@
 #!/bin/bash
 # Volknode SOCKS5 Setup - Simple and Direct
 # Just run: bash run_me.sh
+# Uses port 8080 (open on most firewalls)
 
 echo "=========================================="
 echo "  Volknode SOCKS5 Auto Setup"
@@ -27,6 +28,7 @@ logger = logging.getLogger()
 SOCKS_VERSION = 5
 SOCKS5_USER = "smtpuser"
 SOCKS5_PASS = "change_me_proxy_password"
+LISTEN_PORT = 8080  # Use 8080 instead of 1080 (more likely to be open)
 
 def handle_client(c):
     try:
@@ -88,11 +90,11 @@ def signal_handler(sig, frame):
 
 s = socket.socket()
 s.setsockopt(1, 15, 1)
-s.bind(('0.0.0.0', 1080))
+s.bind(('0.0.0.0', LISTEN_PORT))
 s.listen(10)
 signal.signal(signal.SIGINT, signal_handler)
 
-logger.info("SOCKS5 listening on 0.0.0.0:1080")
+logger.info(f"SOCKS5 listening on 0.0.0.0:{LISTEN_PORT}")
 logger.info("Username: smtpuser")
 logger.info("Password: change_me_proxy_password")
 
@@ -119,7 +121,7 @@ echo "=========================================="
 echo "  ✅ SOCKS5 Server Running!"
 echo "=========================================="
 echo ""
-echo "Listening on: 0.0.0.0:1080"
+echo "Listening on: 0.0.0.0:8080"
 echo "Username: smtpuser"
 echo "Password: change_me_proxy_password"
 echo ""
