@@ -68,12 +68,21 @@ def validate_single_email(req: SingleValidationRequest):
 
 @router.post("/deep")
 def validate_email_deep(req: SingleValidationRequest):
+    """
+    Deep email validation with 12-point checks including SMTP verification.
+    Returns immediate result (no Celery task).
+    """
     from app.core.email_checker import check_email_detailed
     import time
     start = time.time()
-    result = check_email_detailed(req.email)
-    result["execution_time_ms"] = round((time.time() - start) * 1000, 2)
-    return result
+    try:
+        result = check_email_detailed(req.email)
+        result["execution_time_ms"] = round((time.time() - start) * 1000, 2)
+        return result
+    except Exception as e:
+        import traceback
+        logger.error(f"Deep validation error for {req.email}: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Validation failed: {str(e)}")
 
 
 # ---------------------------------------------------------------------------
