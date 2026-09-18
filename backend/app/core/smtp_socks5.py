@@ -1,5 +1,5 @@
 """
-SOCKS5 SMTP wrapper for email verification via Volknode proxy.
+SOCKS5 SMTP Email Validation via Volknode Proxy
 Routes SMTP (port 25) through SOCKS5 proxy to bypass Oracle's port 25 block.
 """
 import os
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 # SOCKS5 Proxy Configuration (Volknode)
 SOCKS5_PROXY_HOST = os.environ.get("SOCKS5_PROXY_HOST", "87.251.66.181").strip()
-SOCKS5_PROXY_PORT = int(os.environ.get("SOCKS5_PROXY_PORT", "1080"))
+SOCKS5_PROXY_PORT = int(os.environ.get("SOCKS5_PROXY_PORT", "8080"))
 SOCKS5_PROXY_USER = os.environ.get("SOCKS5_PROXY_USER", "smtpuser").strip()
 SOCKS5_PROXY_PASS = os.environ.get("SOCKS5_PROXY_PASS", "change_me_proxy_password").strip()
 
@@ -27,7 +27,7 @@ resolver.timeout = 3.0
 resolver.lifetime = 5.0
 
 
-def check_email_via_socks5(email: str, timeout: float = 20.0) -> Tuple[str, str]:
+def check_email(email: str, timeout: float = 15.0) -> Tuple[str, str]:
     """
     Verify email via SMTP through SOCKS5 proxy.
     Returns: (status, reason)
@@ -36,6 +36,8 @@ def check_email_via_socks5(email: str, timeout: float = 20.0) -> Tuple[str, str]
     """
     try:
         # Parse email
+        if "@" not in email:
+            return ("UNKNOWN", "Invalid email format")
         local, domain = email.rsplit("@", 1)
     except ValueError:
         return ("UNKNOWN", "Invalid email format")
@@ -52,9 +54,11 @@ def check_email_via_socks5(email: str, timeout: float = 20.0) -> Tuple[str, str]
     except dns.resolver.NoAnswer:
         return ("NOT_DELIVERABLE", "No MX records found")
     except Exception as e:
-        return ("UNKNOWN", f"DNS lookup failed: {e}")
+        return ("UNKNOWN", f"DNS lookup failed: {str(e)[:50]}")
 
     # Create SOCKS5 socket
+    sock = None
+    smtp = None
     try:
         sock = socks.socksocket(socket.AF_INET, socket.SOCK_STREAM)
         sock.set_proxy(
@@ -67,7 +71,7 @@ def check_email_via_socks5(email: str, timeout: float = 20.0) -> Tuple[str, str]
         sock.settimeout(timeout)
         
         # Connect to MX server via SOCKS5
-        logger.info(f"[SMTP-SOCKS5] Connecting to {mx_host}:25 via {SOCKS5_PROXY_HOST}:{SOCKS5_PROXY_PORT}")
+        logger.info(f"[SMTP] Connecting to {mx_host}:25 via SOCKS5 {SOCKS5_PROXY_HOST}:{SOCKS5_PROXY_PORT}")
         sock.connect((mx_host, 25))
         
         # Wrap in SMTP
@@ -77,7 +81,6 @@ def check_email_via_socks5(email: str, timeout: float = 20.0) -> Tuple[str, str]
         # Get banner
         code, banner = smtp.getreply()
         if code != 220:
-            sock.close()
             return ("UNKNOWN", f"Unexpected banner code {code}")
         
         # EHLO/HELO
@@ -94,39 +97,33 @@ def check_email_via_socks5(email: str, timeout: float = 20.0) -> Tuple[str, str]
         
         # Interpret response
         if code == 250:
-            # Check for catch-all by testing random address
-            return ("DELIVERABLE", f"Mailbox accepted (Code {code})")
+            return ("DELIVERABLE", f"Mailbox accepted")
         elif code == 550:
-            return ("NOT_DELIVERABLE", f"Mailbox rejected: {response_str}")
-        elif code == 551:
-            return ("NOT_DELIVERABLE", f"User not local: {response_str}")
+            return ("NOT_DELIVERABLE", f"Mailbox rejected")
+        elif code in [551, 553]:
+            return ("NOT_DELIVERABLE", f"Invalid mailbox")
         elif code == 552:
-            return ("NOT_DELIVERABLE", f"Mailbox full: {response_str}")
-        elif code == 553:
-            return ("NOT_DELIVERABLE", f"Invalid mailbox: {response_str}")
-        elif code == 450 or code == 451 or code == 452:
-            return ("RISKY", f"Temporary failure (greylisting?): {response_str}")
+            return ("NOT_DELIVERABLE", f"Mailbox full")
+        elif code in [450, 451, 452]:
+            return ("RISKY", f"Temporary failure (greylisting)")
         else:
-            return ("UNKNOWN", f"Unexpected SMTP code {code}: {response_str}")
+            return ("UNKNOWN", f"SMTP code {code}: {response_str[:50]}")
             
     except socks.ProxyConnectionError as e:
-        return ("UNKNOWN", f"SOCKS5 proxy connection failed: {e}")
+        return ("UNKNOWN", f"SOCKS5 proxy connection failed: {str(e)[:100]}")
     except socket.timeout:
         return ("UNKNOWN", "SMTP connection timed out")
     except Exception as e:
-        return ("UNKNOWN", f"SMTP error: {e}")
+        return ("UNKNOWN", f"SMTP error: {type(e).__name__}: {str(e)[:50]}")
     finally:
         try:
-            if 'sock' in locals():
+            if smtp:
+                smtp.close()
+        except:
+            pass
+        try:
+            if sock:
                 sock.close()
         except:
             pass
 
-
-def check_email(email: str) -> Tuple[str, str]:
-    """
-    Simple email verification using SOCKS5 proxy.
-    Compatible with existing codebase.
-    Returns: (status, reason)
-    """
-    return check_email_via_socks5(email, timeout=20.0)
