@@ -10,28 +10,23 @@ echo "=========================================="
 echo ""
 
 # Stop service
-echo "[1/5] Stopping SOCKS5 service..."
-sudo systemctl stop volknode-socks5 2>/dev/null || true
+echo "[1/4] Stopping SOCKS5 service..."
+systemctl stop volknode-socks5 2>/dev/null || true
 
 # Update SOCKS5 server to use port 443
-echo "[2/5] Updating SOCKS5 to use port 443..."
-sudo sed -i 's/LISTEN_PORT = 8080/LISTEN_PORT = 443/g' /opt/volknode-socks5/socks5_server.py
+echo "[2/4] Updating SOCKS5 to use port 443..."
+sed -i 's/LISTEN_PORT = 8080/LISTEN_PORT = 443/g' /opt/volknode-socks5/socks5_server.py
 
 # Start service
-echo "[3/5] Starting SOCKS5 service..."
-sudo systemctl start volknode-socks5
+echo "[3/4] Starting SOCKS5 service..."
+systemctl start volknode-socks5
 
 # Wait for startup
 sleep 2
 
 # Check status
-echo "[4/5] Checking service status..."
-sudo systemctl status volknode-socks5 --no-pager | head -5
-
-# Allow port 443 in firewall
-echo "[5/5] Updating firewall..."
-sudo ufw allow 443 2>/dev/null || true
-sudo ufw reload 2>/dev/null || true
+echo "[4/4] Checking service status..."
+systemctl status volknode-socks5 --no-pager | head -5
 
 echo ""
 echo "=========================================="
@@ -45,3 +40,4 @@ echo ""
 echo "Check logs:"
 echo "  journalctl -u volknode-socks5 -f"
 echo ""
+
