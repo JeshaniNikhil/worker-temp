@@ -38,7 +38,7 @@ services:
 
       # SOCKS5 Proxy (Volknode) for SMTP via port 25
       SOCKS5_PROXY_HOST: 87.251.66.181
-      SOCKS5_PROXY_PORT: 8080
+      SOCKS5_PROXY_PORT: 443
       SOCKS5_PROXY_USER: smtpuser
       SOCKS5_PROXY_PASS: change_me_proxy_password
 
@@ -67,7 +67,7 @@ services:
 
       # SOCKS5 Proxy (Volknode) for SMTP via port 25
       SOCKS5_PROXY_HOST: 87.251.66.181
-      SOCKS5_PROXY_PORT: 8080
+      SOCKS5_PROXY_PORT: 443
       SOCKS5_PROXY_USER: smtpuser
       SOCKS5_PROXY_PASS: change_me_proxy_password
 
