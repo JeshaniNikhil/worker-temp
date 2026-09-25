@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 # SOCKS5 Proxy Configuration (Volknode)
 SOCKS5_PROXY_HOST = os.environ.get("SOCKS5_PROXY_HOST", "87.251.66.181").strip()
-SOCKS5_PROXY_PORT = int(os.environ.get("SOCKS5_PROXY_PORT", "8080"))
+SOCKS5_PROXY_PORT = int(os.environ.get("SOCKS5_PROXY_PORT", "443"))
 SOCKS5_PROXY_USER = os.environ.get("SOCKS5_PROXY_USER", "smtpuser").strip()
 SOCKS5_PROXY_PASS = os.environ.get("SOCKS5_PROXY_PASS", "change_me_proxy_password").strip()
 
@@ -27,7 +27,7 @@ resolver.timeout = 3.0
 resolver.lifetime = 5.0
 
 
-def check_email(email: str, timeout: float = 15.0) -> Tuple[str, str]:
+def check_email(email: str, timeout: float = 30.0) -> Tuple[str, str]:
     """
     Verify email via SMTP through SOCKS5 proxy.
     Returns: (status, reason)
