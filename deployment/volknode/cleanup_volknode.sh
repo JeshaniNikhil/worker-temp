@@ -1,5 +1,5 @@
 #!/bin/bash
-# Complete cleanup script for Volknode server
+# Complete cleanup script for Volknode server (root user)
 # Removes old SOCKS5 proxy, old deployments, and Docker containers
 
 set -e
@@ -27,8 +27,8 @@ echo ""
 # Stop and disable SOCKS5 service
 echo "🛑 Step 2/6: Stopping SOCKS5 service..."
 if systemctl is-active --quiet volknode-socks5 2>/dev/null; then
-    sudo systemctl stop volknode-socks5
-    sudo systemctl disable volknode-socks5
+    systemctl stop volknode-socks5
+    systemctl disable volknode-socks5
     echo "✅ SOCKS5 service stopped and disabled"
 else
     echo "⚠️  SOCKS5 service not running"
@@ -38,15 +38,15 @@ echo ""
 # Remove SOCKS5 files
 echo "🗑️  Step 3/6: Removing SOCKS5 files..."
 if [ -d "/opt/volknode-socks5" ]; then
-    sudo rm -rf /opt/volknode-socks5
+    rm -rf /opt/volknode-socks5
     echo "✅ Removed /opt/volknode-socks5"
 else
     echo "⚠️  /opt/volknode-socks5 not found"
 fi
 
 if [ -f "/etc/systemd/system/volknode-socks5.service" ]; then
-    sudo rm -f /etc/systemd/system/volknode-socks5.service
-    sudo systemctl daemon-reload
+    rm -f /etc/systemd/system/volknode-socks5.service
+    systemctl daemon-reload
     echo "✅ Removed SOCKS5 systemd service"
 else
     echo "⚠️  SOCKS5 service file not found"
@@ -59,12 +59,19 @@ OLD_DIRS=(
     "/opt/wolf-validator-backend"
     "/opt/wolf-group-data-validator"
     "/root/wolf-validator"
-    "/home/*/wolf-validator*"
 )
 
 for dir in "${OLD_DIRS[@]}"; do
     if [ -d "$dir" ]; then
-        sudo rm -rf "$dir"
+        rm -rf "$dir"
+        echo "✅ Removed $dir"
+    fi
+done
+
+# Check for home directories (wildcard expansion)
+for dir in /home/*/wolf-validator*; do
+    if [ -d "$dir" ]; then
+        rm -rf "$dir"
         echo "✅ Removed $dir"
     fi
 done
