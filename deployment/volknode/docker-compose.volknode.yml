@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  # Backend API
+  api:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    container_name: volknode-api
+    restart: unless-stopped
+    ports:
+      - "8003:8003"
+    environment:
+      - DATABASE_URL=postgresql://wolfuser:wolfpass123@92.4.73.23:5432/emailplatform
+      - REDIS_URL=redis://localhost:6379/0
+      - SECRET_KEY=your-secret-key-change-in-production
+      - SMTP_VALIDATION_ENABLED=true
+      - SMTP_TIMEOUT=30
+      - ENV=production
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8003 --workers 4
+    depends_on:
+      - redis
+    networks:
+      - volknode-net
+
+  # Celery Worker
+  worker:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    container_name: volknode-worker
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://wolfuser:wolfpass123@92.4.73.23:5432/emailplatform
+      - REDIS_URL=redis://localhost:6379/0
+      - SMTP_VALIDATION_ENABLED=true
+      - SMTP_TIMEOUT=30
+    command: celery -A app.worker worker --loglevel=info --concurrency=4
+    depends_on:
+      - redis
+    networks:
+      - volknode-net
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: volknode-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - volknode-net
+
+volumes:
+  redis-data:
+
+networks:
+  volknode-net:
+    driver: bridge

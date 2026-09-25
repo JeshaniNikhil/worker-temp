@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15
+    container_name: oracle-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=wolfuser
+      - POSTGRES_PASSWORD=wolfpass123
+      - POSTGRES_DB=emailplatform
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "0.0.0.0:5432:5432"  # Expose to Volknode
+    networks:
+      - oracle-net
+
+  # Frontend (React + Nginx)
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile.prod
+    container_name: oracle-frontend
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+    environment:
+      - VITE_API_URL=http://87.251.66.181:8003
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro  # SSL certificates
+    networks:
+      - oracle-net
+
+volumes:
+  postgres-data:
+
+networks:
+  oracle-net:
+    driver: bridge
