@@ -1,0 +1,18 @@
+[Unit]
+Description=Wolf Validator API
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/wolf-validator-backend
+Environment="PATH=/opt/wolf-validator-backend/venv/bin"
+EnvironmentFile=/opt/wolf-validator-backend/.env
+ExecStart=/opt/wolf-validator-backend/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8003 --workers 2
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
