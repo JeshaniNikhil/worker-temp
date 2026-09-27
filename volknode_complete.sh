@@ -47,6 +47,11 @@ if [ ! -d "$VENV_DIR" ]; then
     python3 -m venv --system-site-packages "$VENV_DIR"
 fi
 
+# Fix Python 3.13 psycopg-c compatibility issue by forcing pure python psycopg
+$VENV_DIR/bin/pip uninstall -y psycopg-binary psycopg-c psycopg2-binary || true
+pip uninstall -y psycopg-binary psycopg-c psycopg2-binary --break-system-packages || true
+$VENV_DIR/bin/pip install psycopg==3.1.18 || true
+
 source "$VENV_DIR/bin/activate"
 pip install --no-cache-dir --quiet -r backend/requirements.txt || pip install --no-cache-dir -r backend/requirements.txt --break-system-packages || true
 echo "✅ Python dependencies ready."
@@ -56,6 +61,11 @@ echo ""
 # Step 5: Configure Environment (.env) & Systemd Services
 # ------------------------------------------------------------------------------
 echo "🔐 Step 5/6: Configuring environment & systemd services..."
+
+# Re-enforce pure python psycopg after requirements.txt installation
+$VENV_DIR/bin/pip uninstall -y psycopg-binary psycopg-c psycopg2-binary || true
+pip uninstall -y psycopg-binary psycopg-c psycopg2-binary --break-system-packages || true
+$VENV_DIR/bin/pip install psycopg==3.1.18 || true
 
 cat > "$DEPLOY_DIR/backend/.env" <<'EOF'
 DATABASE_URL=postgresql://wolfuser:wolfpass123@92.4.73.23:5432/emailplatform
