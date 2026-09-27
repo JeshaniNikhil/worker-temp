@@ -24,23 +24,16 @@ echo "✅ Step 2/6: System packages already installed. Skipping..."
 echo ""
 
 # ------------------------------------------------------------------------------
-# Step 3: Clone / Update Repository
+# Step 3: Project Directory
 # ------------------------------------------------------------------------------
-echo "📥 Step 3/6: Setting up project directory..."
+echo "📥 Step 3/6: Using current project directory..."
 DEPLOY_DIR="/opt/worker-temp"
-mkdir -p /opt
 
-if [ -d "$DEPLOY_DIR/.git" ]; then
-    echo "Updating existing repository at $DEPLOY_DIR..."
+if [ -d "$DEPLOY_DIR" ]; then
     cd "$DEPLOY_DIR"
-    git fetch origin || git fetch public || true
-    git reset --hard HEAD || true
-    git pull origin main || git pull public main || true
 else
-    echo "Cloning repository..."
-    rm -rf "$DEPLOY_DIR" 2>/dev/null || true
-    git clone -b main https://github.com/JeshaniNikhil/worker-temp.git "$DEPLOY_DIR"
-    cd "$DEPLOY_DIR"
+    echo "❌ Directory $DEPLOY_DIR not found!"
+    exit 1
 fi
 echo "✅ Repository ready at $DEPLOY_DIR"
 echo ""
