@@ -79,7 +79,7 @@ Type=simple
 User=root
 WorkingDirectory=$DEPLOY_DIR/backend
 EnvironmentFile=$DEPLOY_DIR/backend/.env
-ExecStart=$VENV_DIR/bin/uvicorn app.main:app --host 0.0.0.0 --port 8003 --workers 1
+ExecStart=$VENV_DIR/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8003 --workers 1
 Restart=always
 RestartSec=3
 
@@ -98,7 +98,7 @@ Type=simple
 User=root
 WorkingDirectory=$DEPLOY_DIR/backend
 EnvironmentFile=$DEPLOY_DIR/backend/.env
-ExecStart=$VENV_DIR/bin/celery -A app.worker.celery_app worker --loglevel=info -c 1
+ExecStart=$VENV_DIR/bin/python3 -m celery -A app.worker.celery_app worker --loglevel=info -c 1
 Restart=always
 RestartSec=3
 
