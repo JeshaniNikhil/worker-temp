@@ -12,68 +12,22 @@ echo "=================================================="
 echo ""
 
 # ------------------------------------------------------------------------------
-# Step 1: Enable Swap Memory (Prevents system freezing/hanging)
+# Step 1: Enable Swap Memory (SKIPPED - ALREADY DONE)
 # ------------------------------------------------------------------------------
-echo "🧠 Step 1/6: Checking Memory & Swap..."
-SWAP_TOTAL=$(free -m | awk '/^Swap:/ {print $2}')
-if [ "$SWAP_TOTAL" -eq 0 ]; then
-    echo "⚠️ No swap detected! Creating 1GB swap file to prevent OOM freezes..."
-    fallocate -l 1G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=1024
-    chmod 600 /swapfile
-    mkswap /swapfile
-    swapon /swapfile || true
-    echo "/swapfile swap swap defaults 0 0" >> /etc/fstab || true
-    echo "✅ 1GB Swap created and activated."
-else
-    echo "✅ Swap memory already active (${SWAP_TOTAL}MB)."
-fi
+echo "✅ Step 1/6: Swap memory already configured. Skipping..."
 echo ""
 
 # ------------------------------------------------------------------------------
-# Step 2: Install System Packages via APT
+# Step 2: Install System Packages via APT (SKIPPED - ALREADY DONE)
 # ------------------------------------------------------------------------------
-echo "📦 Step 2/6: Installing system packages via apt-get (this may take a few minutes)..."
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -y
-
-apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
-    python3 \
-    python3-pip \
-    python3-venv \
-    python3-dev \
-    git \
-    redis-server \
-    curl \
-    jq \
-    postgresql-client \
-    python3-fastapi \
-    python3-uvicorn \
-    python3-sqlalchemy \
-    python3-psycopg \
-    python3-celery \
-    python3-redis \
-    python3-dnspython \
-    python3-pydantic \
-    python3-email-validator \
-    python3-httpx \
-    python3-multipart \
-    python3-jinja2 \
-    python3-passlib \
-    python3-bcrypt \
-    python3-openpyxl \
-    python3-socks \
-    python3-phonenumbers
-
-systemctl enable redis-server || true
-systemctl restart redis-server || true
-echo "✅ System packages installed & Redis started."
+echo "✅ Step 2/6: System packages already installed. Skipping..."
 echo ""
 
 # ------------------------------------------------------------------------------
 # Step 3: Clone / Update Repository
 # ------------------------------------------------------------------------------
 echo "📥 Step 3/6: Setting up project directory..."
-DEPLOY_DIR="/opt/wolf-validator-backend"
+DEPLOY_DIR="/opt/worker-temp"
 mkdir -p /opt
 
 if [ -d "$DEPLOY_DIR/.git" ]; then
