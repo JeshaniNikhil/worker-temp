@@ -20,7 +20,7 @@ import logging
 from celery import Celery
 from app.models.database import SessionLocal
 from app.models.models import ValidationJob, ValidationResult
-from app.core.smtp_socks5 import check_email  # SOCKS5-enabled email checker
+from app.core.email_checker import check_email  # Direct SMTP email checker (No proxy)
 
 logger = logging.getLogger(__name__)
 

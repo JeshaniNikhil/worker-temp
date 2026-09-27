@@ -1285,3 +1285,13 @@ class SMTPValidator:
                 res["Final classification"] = "UNKNOWN"
                 res["Reason"] = f"Unrecognized SMTP code: {code}"
 
+
+def check_email(email: str) -> Tuple[str, str]:
+    """
+    Direct SMTP email checker (No proxy).
+    Returns (status, reason).
+    """
+    res = check_email_detailed(email)
+    return (res.get("status", "UNKNOWN"), res.get("reason", ""))
+
+
