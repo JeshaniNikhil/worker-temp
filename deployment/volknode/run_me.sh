@@ -1,131 +1,211 @@
 #!/bin/bash
-# Volknode SOCKS5 Setup - Simple and Direct
-# Just run: bash run_me.sh
-# Uses port 8080 (open on most firewalls)
+# ==============================================================================
+# VOLKNODE NATIVE BACKEND SETUP (NO DOCKER, 1 vCPU / 1GB RAM OPTIMIZED)
+# Complete setup for FastAPI + Celery + Redis connected to Oracle PostgreSQL
+# ==============================================================================
 
-echo "=========================================="
-echo "  Volknode SOCKS5 Auto Setup"
-echo "=========================================="
+set -e
+
+echo "=================================================="
+echo "🚀 VOLKNODE NATIVE BACKEND SETUP"
+echo "=================================================="
 echo ""
 
-# Get current directory (should be /opt/worker-temp/deployment/volknode)
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PROJECT_ROOT="$(dirname $(dirname $SCRIPT_DIR))"
-
-echo "[1/3] Installing dependencies..."
-pip3 install -q pysocks 2>/dev/null || pip install -q pysocks
-
-echo "[2/3] Creating SOCKS5 server..."
-mkdir -p /opt/volknode-socks5
-
-cat > /opt/volknode-socks5/socks5_server.py << 'PYTHON_SOCKS5'
-#!/usr/bin/env python3
-import socket, struct, select, logging, sys, signal
-
-logging.basicConfig(level=logging.INFO, format='[SOCKS5] %(message)s')
-logger = logging.getLogger()
-
-SOCKS_VERSION = 5
-SOCKS5_USER = "smtpuser"
-SOCKS5_PASS = "change_me_proxy_password"
-LISTEN_PORT = 8080  # Use 8080 instead of 1080 (more likely to be open)
-
-def handle_client(c):
-    try:
-        v, nm = struct.unpack('!BB', c.recv(2))
-        c.recv(nm)
-        c.send(struct.pack('!BB', SOCKS_VERSION, 2))
-        v = struct.unpack('!B', c.recv(1))[0]
-        ul = struct.unpack('!B', c.recv(1))[0]
-        u = c.recv(ul).decode()
-        pl = struct.unpack('!B', c.recv(1))[0]
-        p = c.recv(pl).decode()
-        if u == SOCKS5_USER and p == SOCKS5_PASS:
-            c.send(struct.pack('!BB', v, 0))
-            logger.info(f"Auth OK: {u}")
-        else:
-            c.send(struct.pack('!BB', v, 1))
-            c.close()
-            return
-        v, cmd, _, at = struct.unpack('!BBBB', c.recv(4))
-        if at == 1:
-            ip = '.'.join(map(str, struct.unpack('!BBBB', c.recv(4))))
-            port = struct.unpack('!H', c.recv(2))[0]
-        elif at == 3:
-            dl = struct.unpack('!B', c.recv(1))[0]
-            ip = c.recv(dl).decode()
-            port = struct.unpack('!H', c.recv(2))[0]
-        else:
-            c.close()
-            return
-        logger.info(f"CONNECT {ip}:{port}")
-        t = socket.socket()
-        t.settimeout(10)
-        t.connect((ip, port))
-        c.send(struct.pack('!BBBBIH', SOCKS_VERSION, 0, 0, 1, 0, 0))
-        c.setblocking(False)
-        t.setblocking(False)
-        while True:
-            r, _, x = select.select([c, t], [], [c, t], 0.5)
-            if c in r:
-                d = c.recv(4096)
-                if d: t.send(d)
-                else: break
-            if t in r:
-                d = t.recv(4096)
-                if d: c.send(d)
-                else: break
-        t.close()
-        c.close()
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        try:
-            c.close()
-        except:
-            pass
-
-def signal_handler(sig, frame):
-    logger.info("Shutting down...")
-    sys.exit(0)
-
-s = socket.socket()
-s.setsockopt(1, 15, 1)
-s.bind(('0.0.0.0', LISTEN_PORT))
-s.listen(10)
-signal.signal(signal.SIGINT, signal_handler)
-
-logger.info(f"SOCKS5 listening on 0.0.0.0:{LISTEN_PORT}")
-logger.info("Username: smtpuser")
-logger.info("Password: change_me_proxy_password")
-
-try:
-    while True:
-        try:
-            c, a = s.accept()
-            logger.info(f"Connection from {a[0]}")
-            handle_client(c)
-        except Exception as e:
-            logger.error(f"Accept error: {e}")
-            continue
-except KeyboardInterrupt:
-    logger.info("Shutting down...")
-    s.close()
-    sys.exit(0)
-PYTHON_SOCKS5
-
-chmod +x /opt/volknode-socks5/socks5_server.py
-
-echo "[3/3] Starting SOCKS5 server..."
-echo ""
-echo "=========================================="
-echo "  ✅ SOCKS5 Server Running!"
-echo "=========================================="
-echo ""
-echo "Listening on: 0.0.0.0:8080"
-echo "Username: smtpuser"
-echo "Password: change_me_proxy_password"
-echo ""
-echo "Press CTRL+C to stop"
+# ------------------------------------------------------------------------------
+# Step 1: Enable Swap Memory (Prevents system freezing/hanging)
+# ------------------------------------------------------------------------------
+echo "🧠 Step 1/6: Checking Memory & Swap..."
+SWAP_TOTAL=$(free -m | awk '/^Swap:/ {print $2}')
+if [ "$SWAP_TOTAL" -eq 0 ]; then
+    echo "⚠️ No swap detected! Creating 1GB swap file to prevent OOM freezes..."
+    fallocate -l 1G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=1024
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile || true
+    echo "/swapfile swap swap defaults 0 0" >> /etc/fstab || true
+    echo "✅ 1GB Swap created and activated."
+else
+    echo "✅ Swap memory already active (${SWAP_TOTAL}MB)."
+fi
 echo ""
 
-python3 /opt/volknode-socks5/socks5_server.py
+# ------------------------------------------------------------------------------
+# Step 2: Install System Packages via APT
+# ------------------------------------------------------------------------------
+echo "📦 Step 2/6: Installing system packages via apt-get..."
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+
+apt-get install -y -qq \
+    python3 \
+    python3-pip \
+    python3-venv \
+    python3-dev \
+    git \
+    redis-server \
+    curl \
+    jq \
+    postgresql-client \
+    python3-fastapi \
+    python3-uvicorn \
+    python3-sqlalchemy \
+    python3-psycopg \
+    python3-celery \
+    python3-redis \
+    python3-dnspython \
+    python3-pydantic \
+    python3-email-validator \
+    python3-httpx \
+    python3-multipart \
+    python3-jinja2 \
+    python3-passlib \
+    python3-bcrypt \
+    python3-openpyxl \
+    python3-socks \
+    python3-phonenumbers \
+    2>&1 | grep -v "Setting up" | head -15 || true
+
+systemctl enable redis-server || true
+systemctl restart redis-server || true
+echo "✅ System packages installed & Redis started."
+echo ""
+
+# ------------------------------------------------------------------------------
+# Step 3: Clone / Update Repository
+# ------------------------------------------------------------------------------
+echo "📥 Step 3/6: Setting up project directory..."
+DEPLOY_DIR="/opt/wolf-validator-backend"
+mkdir -p /opt
+
+if [ -d "$DEPLOY_DIR/.git" ]; then
+    echo "Updating existing repository at $DEPLOY_DIR..."
+    cd "$DEPLOY_DIR"
+    git fetch origin || git fetch public || true
+    git reset --hard HEAD || true
+    git pull origin main || git pull public main || true
+else
+    echo "Cloning repository..."
+    rm -rf "$DEPLOY_DIR" 2>/dev/null || true
+    git clone -b main https://github.com/JeshaniNikhil/worker-temp.git "$DEPLOY_DIR"
+    cd "$DEPLOY_DIR"
+fi
+echo "✅ Repository ready at $DEPLOY_DIR"
+echo ""
+
+# ------------------------------------------------------------------------------
+# Step 4: Python Virtual Environment & Requirements
+# ------------------------------------------------------------------------------
+echo "🐍 Step 4/6: Configuring Python virtual environment..."
+VENV_DIR="/opt/venv"
+if [ ! -d "$VENV_DIR" ]; then
+    python3 -m venv --system-site-packages "$VENV_DIR"
+fi
+
+source "$VENV_DIR/bin/activate"
+pip install --no-cache-dir --quiet -r backend/requirements.txt || pip install --no-cache-dir -r backend/requirements.txt --break-system-packages || true
+echo "✅ Python dependencies ready."
+echo ""
+
+# ------------------------------------------------------------------------------
+# Step 5: Configure Environment (.env) & Systemd Services
+# ------------------------------------------------------------------------------
+echo "🔐 Step 5/6: Configuring environment & systemd services..."
+
+cat > "$DEPLOY_DIR/backend/.env" <<'EOF'
+DATABASE_URL=postgresql://wolfuser:wolfpass123@92.4.73.23:5432/emailplatform
+CELERY_BROKER_URL=redis://127.0.0.1:6379/0
+REDIS_URL=redis://127.0.0.1:6379/0
+SECRET_KEY=wolf-validator-secret-key-2026-production
+SMTP_VALIDATION_ENABLED=true
+SMTP_TIMEOUT=30
+USE_SOCKS5=false
+ENV=production
+EOF
+
+# Create Systemd Service for API (Uvicorn)
+cat > /etc/systemd/system/wolf-backend.service <<EOF
+[Unit]
+Description=Wolf Email Validator FastAPI Service
+After=network.target redis-server.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$DEPLOY_DIR/backend
+EnvironmentFile=$DEPLOY_DIR/backend/.env
+ExecStart=$VENV_DIR/bin/uvicorn app.main:app --host 0.0.0.0 --port 8003 --workers 1
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Create Systemd Service for Celery Worker
+cat > /etc/systemd/system/wolf-worker.service <<EOF
+[Unit]
+Description=Wolf Email Validator Celery Worker Service
+After=network.target redis-server.service wolf-backend.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$DEPLOY_DIR/backend
+EnvironmentFile=$DEPLOY_DIR/backend/.env
+ExecStart=$VENV_DIR/bin/celery -A app.worker.celery_app worker --loglevel=info -c 1
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable wolf-backend wolf-worker
+systemctl restart wolf-backend wolf-worker
+echo "✅ Systemd services configured and restarted."
+echo ""
+
+# ------------------------------------------------------------------------------
+# Step 6: Testing & Verification
+# ------------------------------------------------------------------------------
+echo "🧪 Step 6/6: Verifying backend deployment..."
+sleep 3
+
+# Check services status
+if systemctl is-active --quiet wolf-backend; then
+    echo "✅ wolf-backend service: RUNNING"
+else
+    echo "❌ wolf-backend service: FAILED"
+    systemctl status wolf-backend --no-pager
+fi
+
+if systemctl is-active --quiet wolf-worker; then
+    echo "✅ wolf-worker service: RUNNING"
+else
+    echo "❌ wolf-worker service: FAILED"
+    systemctl status wolf-worker --no-pager
+fi
+
+echo ""
+echo "Testing Root API Endpoint..."
+API_RESP=$(curl -s http://localhost:8003/ || echo "Failed")
+echo "API Response: $API_RESP"
+echo ""
+
+echo "Testing Single Email Validation Endpoint..."
+VAL_RESP=$(curl -s -X POST http://localhost:8003/api/validation/single \
+    -H "Content-Type: application/json" \
+    -d '{"email":"support@github.com"}' || echo "Failed")
+echo "Validation Response: $VAL_RESP"
+
+echo ""
+echo "=================================================="
+echo "🎉 VOLKNODE BACKEND SETUP COMPLETE!"
+echo "=================================================="
+echo ""
+echo "🌐 API URL: http://87.251.66.181:8003"
+echo "📜 View API Logs:    journalctl -u wolf-backend -f"
+echo "📜 View Worker Logs: journalctl -u wolf-worker -f"
+echo "🔄 Restart Backend:  systemctl restart wolf-backend wolf-worker"
+echo "=================================================="

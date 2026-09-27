@@ -27,13 +27,25 @@ resolver.timeout = 3.0
 resolver.lifetime = 5.0
 
 
+USE_SOCKS5 = os.environ.get("USE_SOCKS5", "false").lower() == "true"
+
+
 def check_email(email: str, timeout: float = 30.0) -> Tuple[str, str]:
     """
-    Verify email via SMTP through SOCKS5 proxy.
+    Verify email via SMTP (direct or through SOCKS5 proxy).
     Returns: (status, reason)
     - status: DELIVERABLE | NOT_DELIVERABLE | CATCH_ALL | RISKY | UNKNOWN
     - reason: Human-readable explanation
     """
+    if not USE_SOCKS5:
+        try:
+            from app.core.email_checker import check_email_detailed
+            res = check_email_detailed(email)
+            return (res.get("status", "UNKNOWN"), res.get("reason", ""))
+        except Exception as e:
+            logger.error(f"[DIRECT SMTP] Validation error for {email}: {e}")
+            return ("UNKNOWN", f"Direct SMTP error: {str(e)[:50]}")
+
     try:
         # Parse email
         if "@" not in email:
