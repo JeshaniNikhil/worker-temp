@@ -68,7 +68,7 @@ pip uninstall -y psycopg-binary psycopg-c psycopg2-binary --break-system-package
 $VENV_DIR/bin/pip install psycopg==3.1.18 || true
 
 cat > "$DEPLOY_DIR/backend/.env" <<'EOF'
-DATABASE_URL=postgresql://wolfuser:wolfpass123@92.4.73.23:5432/emailplatform
+DATABASE_URL=postgresql+psycopg://wolfuser:wolfpass123@92.4.73.23:5432/emailplatform
 CELERY_BROKER_URL=redis://127.0.0.1:6379/0
 REDIS_URL=redis://127.0.0.1:6379/0
 SECRET_KEY=wolf-validator-secret-key-2026-production
