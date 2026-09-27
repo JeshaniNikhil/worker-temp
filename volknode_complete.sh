@@ -2,7 +2,6 @@
 # ==============================================================================
 # VOLKNODE NATIVE BACKEND SETUP (NO DOCKER, 1 vCPU / 1GB RAM OPTIMIZED)
 # Complete setup for FastAPI + Celery + Redis connected to Oracle PostgreSQL
-# Automatically clones repository if /opt/worker-temp does not exist
 # ==============================================================================
 
 set -e
@@ -13,27 +12,9 @@ echo "=================================================="
 echo ""
 
 # ------------------------------------------------------------------------------
-# Step 1: Ensure Repository (/opt/worker-temp) Exists
+# Step 1: Enable Swap Memory (Prevents system freezing/hanging)
 # ------------------------------------------------------------------------------
-echo "📥 Step 1/7: Checking project directory (/opt/worker-temp)..."
-mkdir -p /opt
-
-if [ ! -d "/opt/worker-temp" ]; then
-    echo "⚠️ /opt/worker-temp not found. Installing git and cloning repository..."
-    apt-get update -qq && apt-get install -y -qq git
-    git clone -b main https://github.com/JeshaniNikhil/worker-temp.git /opt/worker-temp
-    echo "✅ Repository cloned to /opt/worker-temp"
-else
-    echo "✅ /opt/worker-temp found."
-fi
-
-cd /opt/worker-temp
-echo ""
-
-# ------------------------------------------------------------------------------
-# Step 2: Enable Swap Memory (Prevents system freezing/hanging)
-# ------------------------------------------------------------------------------
-echo "🧠 Step 2/7: Checking Memory & Swap..."
+echo "🧠 Step 1/6: Checking Memory & Swap..."
 SWAP_TOTAL=$(free -m | awk '/^Swap:/ {print $2}')
 if [ "$SWAP_TOTAL" -eq 0 ]; then
     echo "⚠️ No swap detected! Creating 1GB swap file to prevent OOM freezes..."
@@ -49,9 +30,9 @@ fi
 echo ""
 
 # ------------------------------------------------------------------------------
-# Step 3: Install System Packages via APT
+# Step 2: Install System Packages via APT
 # ------------------------------------------------------------------------------
-echo "📦 Step 3/7: Installing system packages via apt-get..."
+echo "📦 Step 2/6: Installing system packages via apt-get..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 
@@ -90,9 +71,31 @@ echo "✅ System packages installed & Redis started."
 echo ""
 
 # ------------------------------------------------------------------------------
+# Step 3: Clone / Update Repository
+# ------------------------------------------------------------------------------
+echo "📥 Step 3/6: Setting up project directory..."
+DEPLOY_DIR="/opt/wolf-validator-backend"
+mkdir -p /opt
+
+if [ -d "$DEPLOY_DIR/.git" ]; then
+    echo "Updating existing repository at $DEPLOY_DIR..."
+    cd "$DEPLOY_DIR"
+    git fetch origin || git fetch public || true
+    git reset --hard HEAD || true
+    git pull origin main || git pull public main || true
+else
+    echo "Cloning repository..."
+    rm -rf "$DEPLOY_DIR" 2>/dev/null || true
+    git clone -b main https://github.com/JeshaniNikhil/worker-temp.git "$DEPLOY_DIR"
+    cd "$DEPLOY_DIR"
+fi
+echo "✅ Repository ready at $DEPLOY_DIR"
+echo ""
+
+# ------------------------------------------------------------------------------
 # Step 4: Python Virtual Environment & Requirements
 # ------------------------------------------------------------------------------
-echo "🐍 Step 4/7: Configuring Python virtual environment..."
+echo "🐍 Step 4/6: Configuring Python virtual environment..."
 VENV_DIR="/opt/venv"
 if [ ! -d "$VENV_DIR" ]; then
     python3 -m venv --system-site-packages "$VENV_DIR"
@@ -106,9 +109,9 @@ echo ""
 # ------------------------------------------------------------------------------
 # Step 5: Configure Environment (.env) & Systemd Services
 # ------------------------------------------------------------------------------
-echo "🔐 Step 5/7: Configuring environment & systemd services..."
+echo "🔐 Step 5/6: Configuring environment & systemd services..."
 
-cat > "/opt/worker-temp/backend/.env" <<'EOF'
+cat > "$DEPLOY_DIR/backend/.env" <<'EOF'
 DATABASE_URL=postgresql://wolfuser:wolfpass123@92.4.73.23:5432/emailplatform
 CELERY_BROKER_URL=redis://127.0.0.1:6379/0
 REDIS_URL=redis://127.0.0.1:6379/0
@@ -128,8 +131,8 @@ After=network.target redis-server.service
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/worker-temp/backend
-EnvironmentFile=/opt/worker-temp/backend/.env
+WorkingDirectory=$DEPLOY_DIR/backend
+EnvironmentFile=$DEPLOY_DIR/backend/.env
 ExecStart=$VENV_DIR/bin/uvicorn app.main:app --host 0.0.0.0 --port 8003 --workers 1
 Restart=always
 RestartSec=3
@@ -147,8 +150,8 @@ After=network.target redis-server.service wolf-backend.service
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/worker-temp/backend
-EnvironmentFile=/opt/worker-temp/backend/.env
+WorkingDirectory=$DEPLOY_DIR/backend
+EnvironmentFile=$DEPLOY_DIR/backend/.env
 ExecStart=$VENV_DIR/bin/celery -A app.worker.celery_app worker --loglevel=info -c 1
 Restart=always
 RestartSec=3
@@ -166,7 +169,7 @@ echo ""
 # ------------------------------------------------------------------------------
 # Step 6: Testing & Verification
 # ------------------------------------------------------------------------------
-echo "🧪 Step 6/7: Verifying backend deployment..."
+echo "🧪 Step 6/6: Verifying backend deployment..."
 sleep 3
 
 # Check services status

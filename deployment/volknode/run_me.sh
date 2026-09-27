@@ -2,10 +2,14 @@
 # ==============================================================================
 # VOLKNODE NATIVE BACKEND SETUP (NO DOCKER, 1 vCPU / 1GB RAM OPTIMIZED)
 # Complete setup for FastAPI + Celery + Redis connected to Oracle PostgreSQL
-# Automatically clones repository if /opt/worker-temp does not exist
+# Fast & Lightweight installation without apt pipe hangs or interactive prompts
 # ==============================================================================
 
 set -e
+
+# Disable all interactive prompts & automatic restart prompts
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
 
 echo "=================================================="
 echo "🚀 VOLKNODE NATIVE BACKEND SETUP"
@@ -13,27 +17,9 @@ echo "=================================================="
 echo ""
 
 # ------------------------------------------------------------------------------
-# Step 1: Ensure Repository (/opt/worker-temp) Exists
+# Step 1: Enable Swap Memory FIRST (Prevents OOM freezes during apt)
 # ------------------------------------------------------------------------------
-echo "📥 Step 1/7: Checking project directory (/opt/worker-temp)..."
-mkdir -p /opt
-
-if [ ! -d "/opt/worker-temp" ]; then
-    echo "⚠️ /opt/worker-temp not found. Installing git and cloning repository..."
-    apt-get update -qq && apt-get install -y -qq git
-    git clone -b main https://github.com/JeshaniNikhil/worker-temp.git /opt/worker-temp
-    echo "✅ Repository cloned to /opt/worker-temp"
-else
-    echo "✅ /opt/worker-temp found."
-fi
-
-cd /opt/worker-temp
-echo ""
-
-# ------------------------------------------------------------------------------
-# Step 2: Enable Swap Memory (Prevents system freezing/hanging)
-# ------------------------------------------------------------------------------
-echo "🧠 Step 2/7: Checking Memory & Swap..."
+echo "🧠 Step 1/7: Checking Memory & Swap..."
 SWAP_TOTAL=$(free -m | awk '/^Swap:/ {print $2}')
 if [ "$SWAP_TOTAL" -eq 0 ]; then
     echo "⚠️ No swap detected! Creating 1GB swap file to prevent OOM freezes..."
@@ -49,13 +35,33 @@ fi
 echo ""
 
 # ------------------------------------------------------------------------------
-# Step 3: Install System Packages via APT
+# Step 2: Ensure Repository (/opt/worker-temp) Exists
 # ------------------------------------------------------------------------------
-echo "📦 Step 3/7: Installing system packages via apt-get..."
-export DEBIAN_FRONTEND=noninteractive
+echo "📥 Step 2/7: Checking project directory (/opt/worker-temp)..."
+mkdir -p /opt
+
+if [ ! -d "/opt/worker-temp" ]; then
+    echo "⚠️ /opt/worker-temp not found. Installing git and cloning repository..."
+    apt-get update -qq
+    apt-get install -y -qq --no-install-recommends git
+    git clone -b main https://github.com/JeshaniNikhil/worker-temp.git /opt/worker-temp
+    echo "✅ Repository cloned to /opt/worker-temp"
+else
+    echo "✅ /opt/worker-temp found."
+fi
+
+cd /opt/worker-temp
+echo ""
+
+# ------------------------------------------------------------------------------
+# Step 3: Install Core System Packages via APT (Fast & Non-interactive)
+# ------------------------------------------------------------------------------
+echo "📦 Step 3/7: Installing system packages via apt-get (this takes ~30s)..."
 apt-get update -qq
 
-apt-get install -y -qq \
+apt-get install -y -qq --no-install-recommends \
+    -o Dpkg::Options::="--force-confdef" \
+    -o Dpkg::Options::="--force-confold" \
     python3 \
     python3-pip \
     python3-venv \
@@ -81,8 +87,7 @@ apt-get install -y -qq \
     python3-bcrypt \
     python3-openpyxl \
     python3-socks \
-    python3-phonenumbers \
-    2>&1 | grep -v "Setting up" | head -15 || true
+    python3-phonenumbers
 
 systemctl enable redis-server || true
 systemctl restart redis-server || true
