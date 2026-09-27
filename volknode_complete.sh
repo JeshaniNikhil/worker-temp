@@ -32,11 +32,11 @@ echo ""
 # ------------------------------------------------------------------------------
 # Step 2: Install System Packages via APT
 # ------------------------------------------------------------------------------
-echo "📦 Step 2/6: Installing system packages via apt-get..."
+echo "📦 Step 2/6: Installing system packages via apt-get (this may take a few minutes)..."
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
+apt-get update -y
 
-apt-get install -y -qq \
+apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
     python3 \
     python3-pip \
     python3-venv \
@@ -62,8 +62,7 @@ apt-get install -y -qq \
     python3-bcrypt \
     python3-openpyxl \
     python3-socks \
-    python3-phonenumbers \
-    2>&1 | grep -v "Setting up" | head -15 || true
+    python3-phonenumbers
 
 systemctl enable redis-server || true
 systemctl restart redis-server || true
