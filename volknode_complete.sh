@@ -125,6 +125,11 @@ if timeout 5 bash -c 'cat /dev/null > /dev/tcp/gmail-smtp-in.l.google.com/25' 2>
 else
     echo "❌ Port 25 SMTP: BLOCKED"
 fi
+
+echo ""
+echo "🔓 Step 4c: Opening port 8003 in UFW (for Oracle frontend to reach this API)..."
+ufw allow 8003/tcp comment 'Wolf API' 2>/dev/null || true
+echo "✅ Port 8003 open in UFW"
 echo ""
 
 # ------------------------------------------------------------------------------
