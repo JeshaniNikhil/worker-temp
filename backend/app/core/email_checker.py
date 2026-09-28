@@ -610,22 +610,22 @@ def check_email_detailed(raw_email: str) -> Dict[str, Any]:
     elif smtp_cls == "CONNECTION_ERROR":
         checks.append(_make_check(
             "SMTP Handshake & Mailbox Verification", "WARNING",
-            f"⚠️ SMTP Connection Error (Port 25 blocked or IP binding issue): {smtp_reason}", "smtp"
+            f"⚠️ SMTP Connection Error: {smtp_reason}. The email domain may be valid but the server blocked our verification IP.", "smtp"
         ))
     elif smtp_cls == "SMTP_BANNER_TIMEOUT":
         checks.append(_make_check(
             "SMTP Handshake & Mailbox Verification", "WARNING",
-            f"⚠️ TCP connected but SMTP banner timed out. Treat as UNKNOWN.", "smtp"
+            f"⚠️ Mail server connected but did not respond in time (anti-bot protection). Email domain is valid — mailbox existence is unverified.", "smtp"
         ))
     elif smtp_cls == "TCP_CONNECTION_FAILED":
         checks.append(_make_check(
             "SMTP Handshake & Mailbox Verification", "WARNING",
-            f"⚠️ TCP connection failed (port 25 blocked or host down).", "smtp"
+            f"⚠️ Mail server blocked our connection on all ports (25/587/465). This is common with Gmail/Yahoo when the verification IP lacks rDNS PTR record. Email format and MX records are valid — domain can receive mail.", "smtp"
         ))
     elif smtp_cls == "SMTP_TIMEOUT_AFTER_CONNECTION":
         checks.append(_make_check(
             "SMTP Handshake & Mailbox Verification", "WARNING",
-            f"⚠️ SMTP command timed out after connection.", "smtp"
+            f"⚠️ Mail server timed out during SMTP exchange (anti-enumeration). Email domain is valid — treat as RISKY.", "smtp"
         ))
     elif smtp_cls == "SOURCE_IP_BIND_ERROR":
         checks.append(_make_check(
@@ -1073,37 +1073,48 @@ class SMTPValidator:
             result["DNS result"] = "NO_MX"
             return result
 
-        # 3. SMTP checking over MX records
+        # 3. SMTP checking over MX records — try port 25, then 587, then 465 as fallbacks
         last_connection_err = None
+        SMTP_PORTS = [25, 587, 465]  # port 25 = standard; 587 = STARTTLS; 465 = SMTPS
         for pref, mx in mx_list:
             result["Selected MX"] = mx
             result["MX priority"] = pref
+            got_definitive = False
 
-            smtp_res = self._probe_mx(mx, email, result, start_time)
-            result.update(smtp_res)
+            for port in SMTP_PORTS:
+                logger.info(f"[SMTP] Trying MX {mx} on port {port}")
+                smtp_res = self._probe_mx(mx, email, result, start_time, port=port)
+                result.update(smtp_res)
+                final_cls = smtp_res.get("Final classification", "UNKNOWN")
 
-            final_cls = smtp_res.get("Final classification", "UNKNOWN")
+                if final_cls in ("TCP_CONNECTION_FAILED", "CONNECTION_ERROR",
+                                 "SMTP_BANNER_TIMEOUT", "SMTP_TIMEOUT_AFTER_CONNECTION",
+                                 "SOURCE_IP_BIND_ERROR"):
+                    logger.warning(f"[SMTP] MX {mx}:{port} failed with {final_cls}, trying next port")
+                    continue  # try next port
 
-            # Definitive connection failure → try next MX
-            if final_cls in ("TCP_CONNECTION_FAILED", "CONNECTION_ERROR", "SMTP_BANNER_TIMEOUT",
-                             "SMTP_TIMEOUT_AFTER_CONNECTION", "SOURCE_IP_BIND_ERROR"):
-                last_connection_err = smtp_res
-                logger.warning(f"[SMTP] MX {mx} failed with {final_cls}, trying next MX if available")
-                continue
+                # Got a definitive answer — stop port loop
+                result["Selected Port"] = port
+                got_definitive = True
+                break
 
-            # Got a definitive answer (VALID, INVALID, TEMPORARY_FAILURE, etc.) — stop
-            break
+            if got_definitive:
+                break  # stop MX loop too
+
+            # All ports failed for this MX → try next MX
+            last_connection_err = smtp_res
+            logger.warning(f"[SMTP] All ports failed for MX {mx}, trying next MX")
 
         # Catch-all detection: ONLY run if mailbox itself was positively accepted (VALID/ACCEPTED)
-        # The catch-all probe result is stored as metadata, NOT used to downgrade the mailbox result
         result["catch_all"] = False
         result["catch_all_note"] = ""
+        working_port = result.get("Selected Port", 25)  # use same port that succeeded
         if result.get("Final classification") in ("VALID", "ACCEPTED"):
             import uuid
             random_local = f"catchall-probe-{uuid.uuid4().hex[:12]}"
             random_email = f"{random_local}@{domain}"
-            logger.info(f"[CATCH-ALL] Testing random address: {random_email}")
-            catch_all_res = self._probe_mx(result["Selected MX"], random_email, {}, start_time, is_catch_all_probe=True)
+            logger.info(f"[CATCH-ALL] Testing random address: {random_email} on port {working_port}")
+            catch_all_res = self._probe_mx(result["Selected MX"], random_email, {}, start_time, is_catch_all_probe=True, port=working_port)
             random_cls = catch_all_res.get("Final classification", "UNKNOWN")
             logger.info(f"[CATCH-ALL] Random probe result: {random_cls}")
             if random_cls in ("VALID", "ACCEPTED"):
@@ -1141,7 +1152,7 @@ class SMTPValidator:
         )
         return result
 
-    def _probe_mx(self, mx: str, email: str, result: dict, start_time: float, is_catch_all_probe: bool = False) -> dict:
+    def _probe_mx(self, mx: str, email: str, result: dict, start_time: float, is_catch_all_probe: bool = False, port: int = 25) -> dict:
         if is_catch_all_probe:
             res = {}
         else:
@@ -1153,10 +1164,10 @@ class SMTPValidator:
         # Logging prefix
         log_domain = result.get("Domain", "")
         logger.info(f"[DNS] domain={log_domain}")
-        logger.info(f"[MX] {mx}")
+        logger.info(f"[MX] {mx}:{port}")
 
         try:
-            # 4. TCP Port 25 Connection
+            # TCP Connection on specified port
             server = CustomSMTP(
                 connect_timeout=self.connect_timeout,
                 banner_timeout=self.banner_timeout,
@@ -1166,7 +1177,7 @@ class SMTPValidator:
             if SMTP_SOURCE_IP and ":" not in SMTP_SOURCE_IP:
                 server.source_address = (SMTP_SOURCE_IP, 0)
                 
-            server.connect(mx, 25)
+            server.connect(mx, port)
             
             res["TCP latency"] = round(time.time() - conn_start, 3)
             res["TCP connection result"] = "CONNECTED"
