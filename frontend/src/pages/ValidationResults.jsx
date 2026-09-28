@@ -717,17 +717,20 @@ const JobDetail = ({ jobId }) => {
   const handleExport = async options => {
     setIsExporting(true);
     try {
+      // Use the simple /download GET endpoint (backend has no /export POST)
       const token = localStorage.getItem('auth_token');
-      const resp = await fetch(`${API_BASE_URL}/validation/jobs/${jobId}/export`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ format: options.format, limit: options.limit, platforms: options.platforms, status_filters: options.status_filters, columns: options.columns }),
+      const resp = await fetch(`${API_BASE_URL}/validation/jobs/${jobId}/download`, {
+        method: 'GET',
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });
-      if (!resp.ok) throw new Error('Export failed');
+      if (!resp.ok) throw new Error(`Export failed (${resp.status})`);
       const blob = await resp.blob();
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = `validated_${job.filename}.${options.format}`;
-      document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(url);
+      const a = document.createElement('a'); a.href = url;
+      const ext = (options?.format === 'xlsx') ? 'xlsx' : 'csv';
+      a.download = `validated_${job.filename.replace(/\.[^.]+$/, '')}.${ext}`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
     } catch (err) { alert('Export failed: ' + err.message); }
     finally { setIsExporting(false); setShowExportModal(false); }
   };
@@ -742,10 +745,18 @@ const JobDetail = ({ jobId }) => {
   const isPaused = job.status === 'PAUSED';
   const isActive = isRunning || isPaused;
   const colMap = job.column_mapping || {};
-  const hasFB = !!colMap.facebook, hasIG = !!colMap.instagram, hasLI = !!colMap.linkedin;
-  const hasWA = !!colMap.whatsapp, hasWEB = !!colMap.website, hasPH = !!colMap.phone, hasEM = !!colMap.email;
+  // hasEM: true if email column was mapped OR if any result actually has an email (covers old jobs)
+  const hasEM = !!colMap.email || results.some(r => !!r.email);
+  const hasFB  = !!colMap.facebook;
+  const hasIG  = !!colMap.instagram;
+  const hasLI  = !!colMap.linkedin;
+  const hasWA  = !!colMap.whatsapp;
+  const hasWEB = !!colMap.website;
+  const hasPH  = !!colMap.phone;
 
-  const activePlatforms = ['email','whatsapp','facebook','instagram','linkedin','website','phone'].filter(p => ({ email: hasEM, whatsapp: hasWA, facebook: hasFB, instagram: hasIG, linkedin: hasLI, website: hasWEB, phone: hasPH }[p]));
+  const activePlatforms = ['email','whatsapp','facebook','instagram','linkedin','website','phone'].filter(p =>
+    ({ email: hasEM, whatsapp: hasWA, facebook: hasFB, instagram: hasIG, linkedin: hasLI, website: hasWEB, phone: hasPH }[p])
+  );
 
   const counts = results.reduce((acc, r) => {
     const normE = normalizeEmailStatus(r.status);
@@ -1070,9 +1081,36 @@ const JobDetail = ({ jobId }) => {
                       <tr style={{ background: 'rgba(249,115,22,0.02)' }}>
                         <td colSpan={10} style={{ padding: '0.75rem 1rem 1rem' }}>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.75rem' }}>
-                            {hasEM && r.email_data && (platformTab === 'ALL' || platformTab === 'email') && (
+                            {/* Email evidence — always show if this row has email data */}
+                            {hasEM && (platformTab === 'ALL' || platformTab === 'email') && (
                               <div>
-                                <EvidencePanel data={{ ...r.email_data, status: emailNormStatus }} platform="email" label="📧 Email" color="#f97316" />
+                                {r.email_data ? (
+                                  <EvidencePanel data={{ ...r.email_data, status: emailNormStatus }} platform="email" label="📧 Email" color="#f97316" />
+                                ) : (
+                                  /* Fallback: render basic info from r.status + r.reason when email_data is missing */
+                                  <div style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.25)', borderRadius: 10, padding: '0.8rem' }}>
+                                    <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#f97316', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+                                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f97316', display: 'inline-block' }} />
+                                      📧 Email Evidence
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 10, fontSize: '0.73rem', lineHeight: 1.6, marginBottom: 4 }}>
+                                      <span style={{ color: 'var(--text-secondary)', minWidth: 90, fontWeight: 600 }}>Status</span>
+                                      <StatusBadge status={emailNormStatus} platform="email" />
+                                    </div>
+                                    {r.email && (
+                                      <div style={{ display: 'flex', gap: 10, fontSize: '0.73rem', lineHeight: 1.6, marginBottom: 4 }}>
+                                        <span style={{ color: 'var(--text-secondary)', minWidth: 90, fontWeight: 600 }}>Email</span>
+                                        <span style={{ fontFamily: 'monospace', fontSize: '0.72rem', wordBreak: 'break-all' }}>{r.email}</span>
+                                      </div>
+                                    )}
+                                    {r.reason && (
+                                      <div style={{ display: 'flex', gap: 10, fontSize: '0.73rem', lineHeight: 1.6 }}>
+                                        <span style={{ color: 'var(--text-secondary)', minWidth: 90, fontWeight: 600 }}>Reason</span>
+                                        <span style={{ color: 'var(--text-primary)', wordBreak: 'break-word', flex: 1, fontSize: '0.7rem' }}>{r.reason}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                                 {hasMultiEmail && r.email_statuses && (
                                   <div style={{ marginTop: 8, border: '1px solid rgba(249,115,22,0.2)', borderRadius: 8, overflow: 'hidden' }}>
                                     <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#f97316', padding: '6px 10px', background: 'rgba(249,115,22,0.06)' }}>Per-Address Breakdown</div>
