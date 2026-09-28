@@ -26,7 +26,9 @@ if [ ! -d "$DEPLOY_DIR" ]; then
     git clone -b main https://github.com/JeshaniNikhil/worker-temp.git "$DEPLOY_DIR"
 fi
 cd "$DEPLOY_DIR"
-echo "✅ Ready at $DEPLOY_DIR"
+echo "  Pulling latest code from GitHub..."
+git pull origin main 2>&1 | tail -5
+echo "✅ Ready at $DEPLOY_DIR (latest code pulled)"
 echo ""
 
 # ------------------------------------------------------------------------------
@@ -70,6 +72,10 @@ SECRET_KEY=wolf-validator-secret-key-2026-production
 SMTP_VALIDATION_ENABLED=true
 SMTP_TIMEOUT=30
 USE_SOCKS5=false
+
+# Rate limiting for bulk CSV (lower = faster bulk processing)
+SMTP_DELAY_MIN=0.8
+SMTP_DELAY_MAX=1.8
 
 ENV=production
 ENVEOF
@@ -148,7 +154,7 @@ Type=simple
 User=root
 WorkingDirectory=$DEPLOY_DIR/backend
 EnvironmentFile=$DEPLOY_DIR/backend/.env
-ExecStart=$VENV_DIR/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8003 --workers 1
+ExecStart=$VENV_DIR/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8003 --workers 1 --timeout-keep-alive 600
 Restart=always
 RestartSec=5
 StandardOutput=journal
