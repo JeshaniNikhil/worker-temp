@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: emailplatform
     ports:
-      - "127.0.0.1:5434:5432"
+      - "0.0.0.0:5440:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
@@ -15,7 +15,7 @@ services:
   redis:
     image: redis:7
     ports:
-      - "127.0.0.1:6381:6379"
+      - "0.0.0.0:6390:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped
@@ -60,10 +60,10 @@ services:
     volumes:
       - ./backend:/app
     environment:
-      DATABASE_URL: postgresql://user:password@127.0.0.1:5434/emailplatform
-      REDIS_URL: redis://127.0.0.1:6381/0
-      CELERY_BROKER_URL: redis://127.0.0.1:6381/0
-      CELERY_RESULT_BACKEND: redis://127.0.0.1:6381/0
+      DATABASE_URL: postgresql://user:password@127.0.0.1:5440/emailplatform
+      REDIS_URL: redis://127.0.0.1:6390/0
+      CELERY_BROKER_URL: redis://127.0.0.1:6390/0
+      CELERY_RESULT_BACKEND: redis://127.0.0.1:6390/0
 
       # SOCKS5 Proxy (Volknode) for SMTP via port 25
       SOCKS5_PROXY_HOST: 87.251.66.181

@@ -57,13 +57,13 @@ echo ""
 echo "🔐 Step 3: Writing .env configuration..."
 
 cat > "$DEPLOY_DIR/backend/.env" << 'ENVEOF'
-# Oracle PostgreSQL (public port 5432)
-DATABASE_URL=postgresql+psycopg://wolfuser:wolfpass123@92.4.73.23:5432/emailplatform
+# Oracle PostgreSQL (public port 5440)
+DATABASE_URL=postgresql+psycopg://user:password@92.4.73.23:5440/emailplatform
 
-# Oracle Redis as Celery broker (public port 6379, with password)
-CELERY_BROKER_URL=redis://:wolfredis123@92.4.73.23:6379/0
-REDIS_URL=redis://:wolfredis123@92.4.73.23:6379/0
-CELERY_RESULT_BACKEND=redis://:wolfredis123@92.4.73.23:6379/0
+# Oracle Redis as Celery broker (public port 6390, no password needed)
+CELERY_BROKER_URL=redis://92.4.73.23:6390/0
+REDIS_URL=redis://92.4.73.23:6390/0
+CELERY_RESULT_BACKEND=redis://92.4.73.23:6390/0
 
 # Security
 SECRET_KEY=wolf-validator-secret-key-2026-production
@@ -92,7 +92,7 @@ source "$VENV_DIR/bin/activate"
 DB_TEST=$(python3 -c "
 import psycopg
 try:
-    conn = psycopg.connect('postgresql://wolfuser:wolfpass123@92.4.73.23:5432/emailplatform', connect_timeout=5)
+    conn = psycopg.connect('postgresql://user:password@92.4.73.23:5440/emailplatform', connect_timeout=5)
     conn.close()
     print('DB_OK')
 except Exception as e:
@@ -103,13 +103,13 @@ if echo "$DB_TEST" | grep -q "DB_OK"; then
     echo "✅ Oracle PostgreSQL: CONNECTED"
 else
     echo "⚠️  Oracle PostgreSQL: $DB_TEST"
-    echo "   NOTE: Open port 5432 in Oracle Cloud Security List for Volknode IP 87.251.66.181"
+    echo "   NOTE: Open port 5440 in Oracle Cloud Security List for Volknode IP 87.251.66.181"
 fi
 
 REDIS_TEST=$(python3 -c "
 import redis
 try:
-    r = redis.Redis(host='92.4.73.23', port=6379, password='wolfredis123', socket_timeout=5)
+    r = redis.Redis(host='92.4.73.23', port=6390, socket_timeout=5)
     r.ping()
     print('REDIS_OK')
 except Exception as e:
@@ -120,7 +120,7 @@ if echo "$REDIS_TEST" | grep -q "REDIS_OK"; then
     echo "✅ Oracle Redis: CONNECTED"
 else
     echo "⚠️  Oracle Redis: $REDIS_TEST"
-    echo "   NOTE: Open port 6379 in Oracle Cloud Security List for Volknode IP 87.251.66.181"
+    echo "   NOTE: Open port 6390 in Oracle Cloud Security List for Volknode IP 87.251.66.181"
 fi
 
 # Test port 25
